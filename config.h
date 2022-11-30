@@ -6,7 +6,7 @@
 //PORTS
 #define SO_PORTI    //number of ports (int,>= 4)
 #define SO_BANCHINE     //maximum number of docks (int)
-#define SO_FILL     //maximum cargo capacity of the port
+#define SO_FILL     //maximum goods capacity of the port
 #define SO_LOADSPEED    //loading/unloading speed of ports (ton/days)
 
 //SHIPS
@@ -14,9 +14,9 @@
 #define SO_SPEED    //speed of ships (double or int)
 #define SO_CAPACITY     //capacity of ships (ton)
 
-//CARGO
-#define SO_MERCI    //type of cargo (int)
-#define SO_SIZE     //weight of cargo (ton)
+//GOODS
+#define SO_MERCI    //type of goods (int)
+#define SO_SIZE     //weight of goods (ton)
 #define SO_MIN_VITA     //minimum expiry date (days)
 #define SO_MAX_VITA     //maximum expiry date (days)
 
