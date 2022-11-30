@@ -20,23 +20,20 @@ int main(){
     
     //Semaphore creation
     int sySem;
-    if((sySem = semget(getpid(),1,IPC_CREAT|IPC_EXCL)) == -1){
+    if((sySem = semget(getpid(),1,IPC_CREAT|IPC_EXCL|0600)) == -1){
         fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
     
-    struct sembuf *sops;
-    sops[0].sem_op= SO_NAVI+SO_PORTI+1;
-    
-    if(semop(sySem,sops,0)<0){
-        fprintf(stderr,"Error initializing semaphore, %d:%s\n",errno,strerror(errno));
+    if(semctl(sySem,0,SETVAL,SO_NAVI+SO_PORTI+1)<0){
+        fprintf(stderr,"Error initializing semaphore, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
-    }
+    } 
 }
 
 //Functions definitions
 int portGenerator(){
-    
+
 }
 
 
