@@ -1,0 +1,17 @@
+
+CC=gcc
+CFLAGS=-std=c89 -pedantic
+
+progetto: progetto.o port.o ship.o
+    $(CC) $(CFLAGS) -o progetto progetto.o port.o ship.o
+progetto.o: 
+    $(CC) $(CFLAGS) -c progetto.c
+port.o:
+    $(CC) $(CFLAGS) -c port.c
+ship.o:
+    $(CC) $(CFLAGS) -c ship.c
+
+clean: 
+    rm -f *.o
+run: 
+    ./progetto
