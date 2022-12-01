@@ -4,7 +4,7 @@
 #define SO_DAYS    //number of simulation days
 
 //PORTS
-#define SO_PORTI 1000      //number of ports (int,>= 4)
+#define SO_PORTI 9    //number of ports (int,>= 4)
 #define SO_BANCHINE     //maximum number of docks (int)
 #define SO_FILL         //maximum goods capacity of the port
 #define SO_LOADSPEED    //loading/unloading speed of ports (ton/days)
@@ -21,7 +21,7 @@
 #define SO_MAX_VITA     //maximum expiry date (days)
 
 //MAP
-#define SO_LATO 5    //side of the map (double)
+#define SO_LATO 0.000001   //side of the map (double)
 
 //WEATHER EVENTS
 #define SO_STORM_DURATION   //duration of storm (hours)
@@ -37,13 +37,19 @@ Desc: check define value of file config.h
 #define PARAM_CHECK 
         void checkParams(){
         if(SO_PORTI<4){
-                    printf("Input error: number of ports < 4\n");
+                    printf("Input error: SO_PORTI < 4\n");
                     exit(EXIT_FAILURE);
         } 
         if(SO_NAVI<1){
-            printf("Input error: number of ships < 1\n");
+            printf("Input error: SO_NAVI < 1\n");
             exit(EXIT_FAILURE);
         } 
+        if(SO_LATO<=0){
+            printf("Input error: SO_LATO cannot be negative or zero\n");
+            exit(EXIT_FAILURE);
+        } 
+
+        /*TODO: check di quante permutazioni ci sono per verificare che ci stiano SO_PORTI nella mappa*/
 }
 
 //TEST ERROR FUNCTION
