@@ -16,8 +16,10 @@
 int main(){
     struct coords ship_coords;
     srand(time(0));
-    /*ship_coords.x=rand()%SO_LATO;
-    ship_coords.y=rand()%SO_LATO;*/
+    double div=rand()/SO_LATO;
+    ship_coords.x=div-(int)div;
+    div=rand()/SO_LATO;
+    ship_coords.y=div-(int)div;
     
 }
 
