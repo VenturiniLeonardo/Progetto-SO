@@ -1,13 +1,14 @@
 //System libraries
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/types.h> /* For portability */
+#include <sys/types.h> // For portability
 #include <sys/sem.h>
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
-#include <float.h> /*for double compare in arrContains*/
+#include <float.h> // for double compare in arrContains
+#include <math.h>  // for abs of value (double compare function)
 
 //Own libraries or definitions
 #include "config.h"
@@ -49,21 +50,27 @@ Desc: check if an c element is present in a array
 */
 int arrContains(struct port arr[],struct coords c,int arrLen){
     
-    int isPresent=0;
+    int contains=0;
     int i;
-    double epsilon=-DBL_MAX; //Min double value
+    double cX,cY;
+    printf("epsilon is %f \n so epsilon-epsilon==0 is %d\n",DBL_EPSILON,((DBL_EPSILON-DBL_EPSILON)<=DBL_EPSILON));
     
-    for(i=0;i<arrLen;i++){
-        if((((arr[i].coord.x)-c.x)<=epsilon)||(((arr[i].coord.y)-c.y)<=epsilon)){
-            isPresent=1;
+    for(i=0;i<=arrLen;i++){
+        printf("looking for %f %f in arr[%d]...",c.x,c.y,i);
+        cX=(arr[i].coord.x)-c.x;
+        cY=(arr[i].coord.y)-c.y;
+        if(((fabs(cX))<=DBL_EPSILON) ){ //&&((fabs(cY))<=DBL_EPSILON)){
+            contains=1;
+            printf("found!");
             break;
         }
+        printf("not found in arr[%d] (%f %f) [%f,%f] {%d,%d}\n",i,arr[i].coord.x,arr[i].coord.y,fabs(cX),fabs(cY),((fabs(cX))<=DBL_EPSILON),((fabs(cY))<=DBL_EPSILON));
     }
-    return isPresent;
+    return contains;
 }
 
-/*
-Input: \\
+/* 
+Input: void
 Output: struct coords c
 Desc: struct coords c with random x and y coords
 */
@@ -72,8 +79,8 @@ struct coords generateRandCoords(){
     struct coords c;
     double range = SO_LATO; 
     double div = RAND_MAX / range;
-    c.x=(rand() / div);
-    c.y=(rand() / div);
+    c.x=(rand() /div );
+    c.y=(rand() /div );
     
     return c;
 }
@@ -92,7 +99,11 @@ int portGenerator(){
     ports[2].coord.y = SO_LATO;
     ports[3].coord.x = SO_LATO; //coord(SO_LATO,0)
     ports[3].coord.y = 0;
-
+    
+    struct coords myC;
+    myC.x=SO_LATO;
+    myC.y=0;
+    
     int i;
     int j;
     int arrLen;
@@ -100,12 +111,11 @@ int portGenerator(){
 
     for (i=4;i<SO_PORTI;i++){   //generating SO_PORTI-4 ports
         j=0;
-        arrLen = (sizeof(ports) / sizeof (struct coords)); //getting ports array length for arrContains function
+        arrLen = (sizeof(ports) / sizeof (struct port)); //getting ports array length for arrContains function
         do{
             j++;
             rn=generateRandCoords(); 
-            printf("try %d \n",j);
-            TEST_ERROR;
+            printf("try %d , rn is %f %f\n",j,rn.x,rn.y);
         }while (arrContains(ports,rn,arrLen));
         ports[i].coord=rn;
     }
@@ -158,7 +168,6 @@ int shipGenerator(int sySem){
             case -1:
                 fprintf(stderr,"Error in fork , %d: %s \n",errno,strerror(errno));
                 return -1;
-                break;
             case 0:
             /* 
                 srand(time(0));
@@ -169,8 +178,7 @@ int shipGenerator(int sySem){
                 semop(sySem,&sops,1);
                 if(execlp("./ship","./ship",NULL) == -1){
                     fprintf(stderr,"Error in execl ship num %d, %d: %s \n",i,errno,strerror(errno));
-                    return -1;                  
-                    break;                   
+                    return -1;                                    
                 }
                 break;
             default:
