@@ -4,7 +4,14 @@ struct{
     short sem_flg;
 }sembuf;
 
-struct{
+struct coords{
     double x;
     double y;
-}coords;
+};
+
+struct port{
+    pid_t pidPort;
+    struct coords coord;
+};
+
+
