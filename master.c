@@ -75,6 +75,7 @@ Desc: struct coords c with random x and y coords
 struct coords generateRandCoords(){
 
     struct coords c;
+    srand(time(0));
     double div = RAND_MAX / SO_LATO;
     c.x = rand() / div;
     c.y = rand() / div;
