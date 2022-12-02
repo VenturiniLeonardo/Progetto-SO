@@ -53,19 +53,17 @@ int arrContains(struct port arr[],struct coords c,int arrLen){
     int contains=0;
     int i;
     double cX,cY;
-    printf("epsilon is %f \n so epsilon-epsilon==0 is %d\n",DBL_EPSILON,((DBL_EPSILON-DBL_EPSILON)<=DBL_EPSILON));
     
-    for(i=0;i<=arrLen;i++){
-        printf("looking for %f %f in arr[%d]...",c.x,c.y,i);
-        cX=(arr[i].coord.x)-c.x;
-        cY=(arr[i].coord.y)-c.y;
-        if(((fabs(cX))<=DBL_EPSILON) ){ //&&((fabs(cY))<=DBL_EPSILON)){
-            contains=1;
-            printf("found!");
+    for(i=0;i<arrLen;i++){
+        cX=fabs(arr[i].coord.x-c.x);
+        cY=fabs(arr[i].coord.y-c.y);
+        if((cX<=SO_DISTANZA) && (cY<=SO_DISTANZA)){ 
+            contains++;
+            printf("found in %d! %f %f \n",i,cX,cY);
             break;
         }
-        printf("not found in arr[%d] (%f %f) [%f,%f] {%d,%d}\n",i,arr[i].coord.x,arr[i].coord.y,fabs(cX),fabs(cY),((fabs(cX))<=DBL_EPSILON),((fabs(cY))<=DBL_EPSILON));
     }
+
     return contains;
 }
 
@@ -77,11 +75,10 @@ Desc: struct coords c with random x and y coords
 struct coords generateRandCoords(){
 
     struct coords c;
-    double range = SO_LATO; 
-    double div = RAND_MAX / range;
-    c.x=(rand() /div );
-    c.y=(rand() /div );
-    
+    double div = RAND_MAX / SO_LATO;
+    c.x = rand() / div;
+    c.y = rand() / div;
+
     return c;
 }
 
@@ -101,29 +98,21 @@ int portGenerator(){
     ports[3].coord.y = 0;
     
     struct coords myC;
-    myC.x=SO_LATO;
-    myC.y=0;
     
     int i;
-    int j;
-    int arrLen;
-    struct coords rn;
-
+    
     for (i=4;i<SO_PORTI;i++){   //generating SO_PORTI-4 ports
-        j=0;
-        arrLen = (sizeof(ports) / sizeof (struct port)); //getting ports array length for arrContains function
         do{
-            j++;
-            rn=generateRandCoords(); 
-            printf("try %d , rn is %f %f\n",j,rn.x,rn.y);
-        }while (arrContains(ports,rn,arrLen));
-        ports[i].coord=rn;
+            myC=generateRandCoords(); 
+        }while(arrContains(ports,myC,i));
+        ports[i].coord=myC;
     }
 
     char x[50];
     char y[50];
 
     for(i = 0;i < SO_PORTI;i++){
+        //printf("port %d : %f %f \n",i,ports[i].coord.x,ports[i].coord.y);
         sprintf(x,"%f", ports[i].coord.x);
         sprintf(y,"%f", ports[i].coord.y);
         switch (ports[i].pidPort = fork()){
