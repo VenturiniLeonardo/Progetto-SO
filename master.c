@@ -157,13 +157,7 @@ int shipGenerator(int sySem){
             case -1:
                 fprintf(stderr,"Error in fork , %d: %s \n",errno,strerror(errno));
                 return -1;
-            case 0:
-            /* 
-                srand(time(0));
-                struct ship;
-                ship.coord.x=rand()%SO_LATO;
-                ship.coord.y=rand()%SO_LATO;
-            */  
+            case 0:  
                 semop(sySem,&sops,1);
                 if(execlp("./ship","./ship",NULL) == -1){
                     fprintf(stderr,"Error in execl ship num %d, %d: %s \n",i,errno,strerror(errno));
@@ -174,5 +168,6 @@ int shipGenerator(int sySem){
                 break;           
         }
     }
+    return 0;
 }
 
