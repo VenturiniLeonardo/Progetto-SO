@@ -15,9 +15,9 @@
 struct coords generateRandCoords(){
     struct coords c;
     srand(time(0));
-    double dec=drand48();
+    double dec=rand()/(RAND_MAX*1.0);
     c.x = dec*SO_LATO;
-    dec=drand48();
+    dec=rand()/(RAND_MAX*1.0);
     c.y = dec*SO_LATO;
     return c;
     
