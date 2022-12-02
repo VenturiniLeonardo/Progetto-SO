@@ -147,10 +147,10 @@ int shipGenerator(int sySem){
     int i;
     pid_t ship_pid[1];
 
-    struct sembuf sops;
+    /*struct sembuf sops;   inserire dentro ship
     sops.sem_num=0;
     sops.sem_op=-1;
-    sops.sem_flg=0;
+    sops.sem_flg=0;*/
     
 
     for(i=0;i<SO_NAVI;i++){     
@@ -159,7 +159,7 @@ int shipGenerator(int sySem){
                 fprintf(stderr,"Error in fork , %d: %s \n",errno,strerror(errno));
                 return -1;
             case 0:  
-                semop(sySem,&sops,1);
+                //semop(sySem,&sops,1);  da mettere dentro ship e porti
                 if(execlp("./ship","./ship",NULL) == -1){
                     fprintf(stderr,"Error in execl ship num %d, %d: %s \n",i,errno,strerror(errno));
                     return -1;                                    

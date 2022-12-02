@@ -12,6 +12,24 @@
 //Own libraries or definitions
 #include "config.h"
 #include "struct.h"
+
+//Function declaration
+struct coords generateRandCoords();
+
+int main(){
+    struct coords ship_coords;
+    ship_coords=generateRandCoords();
+
+}
+
+
+//Functions definitions
+
+/*
+Input: void
+Output: 
+Desc: c
+*/
 struct coords generateRandCoords(){
     struct coords c;
     srand(time(0));
@@ -22,11 +40,4 @@ struct coords generateRandCoords(){
     return c;
     
 }
-
-int main(){
-    struct coords ship_coords;
-    ship_coords=generateRandCoords();
-
-}
-
 
