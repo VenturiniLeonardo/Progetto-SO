@@ -20,6 +20,7 @@ struct coords generateRandCoords(){
     dec=drand48();
     c.y = dec*SO_LATO;
     return c;
+    
 }
 
 int main(){
