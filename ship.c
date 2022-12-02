@@ -12,15 +12,20 @@
 //Own libraries or definitions
 #include "config.h"
 #include "struct.h"
+struct coords generateRandCoords(){
+    struct coords c;
+    srand(time(0));
+    double dec=drand48();
+    c.x = dec*SO_LATO;
+    dec=drand48();
+    c.y = dec*SO_LATO;
+    return c;
+}
 
 int main(){
     struct coords ship_coords;
-    srand(time(0));
-    double div=rand()/SO_LATO;
-    ship_coords.x=div-(int)div;
-    div=rand()/SO_LATO;
-    ship_coords.y=div-(int)div;
-    
+    ship_coords=generateRandCoords();
+
 }
 
 
