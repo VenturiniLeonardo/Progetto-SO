@@ -4,7 +4,7 @@
 
 # Compiler settings - Can be customized.
 CC=gcc
-CFLAGS=-std=c89 -pedantic
+CFLAGS=-std=c89 -Wpedantic
 
 ########################################################################
 ####################### Targets beginning here #########################

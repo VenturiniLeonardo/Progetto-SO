@@ -8,7 +8,7 @@
 #define SO_BANCHINE     //maximum number of docks (int)
 #define SO_FILL         //maximum goods capacity of the port
 #define SO_LOADSPEED    //loading/unloading speed of ports (ton/days)
-#define SO_DISTANZA 0.001   //minimum distance between two ports
+#define SO_DISTANZA 0.1   //minimum distance between two ports
 
 //SHIPS
 #define SO_NAVI  1      //number of ships (int,>=1)
@@ -61,3 +61,22 @@ Desc: check define value of file config.h
 					   getpid(),\
 					   errno,\
 					   strerror(errno));}
+
+//RANDOM COORDS GENERATOR FUNCTION
+/* 
+Input: void
+Output: struct coords c
+Desc: struct coords c with random x and y coords
+*/
+struct coords generateRandCoords(){
+
+    struct coords c;
+    //srand(time(0));
+    double div = RAND_MAX / SO_LATO;
+    c.x = rand() / div;
+    div = RAND_MAX / SO_LATO;
+    c.y = rand() / div;
+
+    return c;
+}
+

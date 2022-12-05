@@ -26,7 +26,7 @@ int main(){
     
     //Semaphore creation
     int sySem;
-    if((sySem = semget(getpid(),1,IPC_CREAT|IPC_EXCL|0600)) == -1){
+    if((sySem = semget(getpid(),1,IPC_CREAT|IPC_EXCL|0666)) == -1){
         fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
@@ -37,7 +37,6 @@ int main(){
     }
 
     portGenerator();
-    sleep(10);
     //shipGenerator(sySem);
 }
 
@@ -67,21 +66,7 @@ int arrContains(struct port arr[],struct coords c,int arrLen){
     return contains;
 }
 
-/* 
-Input: void
-Output: struct coords c
-Desc: struct coords c with random x and y coords
-*/
-struct coords generateRandCoords(){
 
-    struct coords c;
-    srand(time(0));
-    double div = RAND_MAX / SO_LATO;
-    c.x = rand() / div;
-    c.y = rand() / div;
-
-    return c;
-}
 
 /*
 Input: void
@@ -112,27 +97,29 @@ int portGenerator(){
     char x[50];
     char y[50];
 
+    pid_t sonPid;
     for(i = 0;i < SO_PORTI;i++){
-        //printf("port %d : %f %f \n",i,ports[i].coord.x,ports[i].coord.y);
         sprintf(x,"%f", ports[i].coord.x);
         sprintf(y,"%f", ports[i].coord.y);
-        switch (ports[i].pidPort = fork()){
-        case -1:
-                fprintf(stderr,"Error in fork, %d: %s",errno,strerror(errno));
-                return -1;
-        case 0:
-
-            if(execlp("./port","./port",x,y,NULL) == -1){
-                fprintf(stderr,"Error in execlp port numer %d, %d: %s",i,errno,strerror(errno));
-                return -1;
-            }
-            
-            break;
-        default:
-            break;
+        switch (sonPid = fork()){
+            case -1:
+                    fprintf(stderr,"Error in fork, %d: %s",errno,strerror(errno));
+                    return -1;
+            case 0:
+                if(execlp("./port","./port",x,y,NULL) == -1){
+                    fprintf(stderr,"Error in execlp port numer %d, %d: %s",i,errno,strerror(errno));
+                    return -1;
+                }
+                
+                break;
+            default:
+                ports[i].pidPort = sonPid;
+                break;
           
         }
     }
+
+    
 
     return 0;
 }
@@ -171,4 +158,5 @@ int shipGenerator(int sySem){
     }
     return 0;
 }
+
 

@@ -20,24 +20,21 @@ int main(){
     struct coords ship_coords;
     ship_coords=generateRandCoords();
 
+    int sySem;
+    if((sySem = semget(getppid(),1,IPC_CREAT|IPC_EXCL|0666)) == -1){
+        fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    struct sembuf sops;   
+    sops.sem_num=0;
+    sops.sem_op=-1;
+    sops.sem_flg=0;
+    semop(sySem,&sops,1); 
+    
+
 }
 
 
 //Functions definitions
 
-/*
-Input: void
-Output: 
-Desc: c
-*/
-struct coords generateRandCoords(){
-    struct coords c;
-    srand(time(0));
-    double dec=rand()/RAND_MAX;
-    c.x = dec*SO_LATO;
-    dec=rand()/RAND_MAX;
-    c.y = dec*SO_LATO;
-    return c;
-    
-}
 
