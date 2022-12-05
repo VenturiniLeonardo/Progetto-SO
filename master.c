@@ -9,6 +9,8 @@
 #include <time.h>
 #include <float.h> // for double compare in arrContains
 #include <math.h>  // for abs of value (double compare function)
+#include <sys/shm.h>
+#include <signal.h>
 
 //Own libraries or definitions
 #include "config.h"
@@ -17,8 +19,10 @@
 //Function declaration
 int arrContains(struct port[],struct coords,int );
 int portGenerator();
-int shipGenerator(int);
+int shipGenerator();
 int arrContains(struct port [],struct coords ,int );
+int deallocateResources();
+int genRandInt(int,int);
 
 //Master main
 int main(){
@@ -36,11 +40,73 @@ int main(){
         exit(EXIT_FAILURE);
     }
 
+    
     portGenerator();
-    //shipGenerator(sySem);
+    shipGenerator();
+
+    int shmPort;
+    if((shmPort = shmget(PORT_POS_KEY,0,IPC_CREAT |IPC_EXCL|0666 )) == -1){
+        fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    
+    struct port *ports;
+    ports=(struct port *) shmat(shmPort,NULL,SHM_RDONLY);
+    if (ports == (void *) -1){
+        fprintf(stderr,"Error assing ports to shared memory, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    int index=genRandInt(0,SO_PORTI-1);
+    kill(SIGALRM,ports[index].pidPort);
+    TEST_ERROR;
+    //alarm set and creation
+    /*
+    int elapsedDays=0;  //elapsed days
+    while(elapsed<=30){
+    
+    elapsedDays++;
+
+    alarm(DAY_TIME);
+    //call dump
+    
+    }*/
+
+    sleep(10);
+    deallocateResources();
 }
 
 //Functions definitions
+
+/* 
+Input: int max, int min
+Output: int r random
+Desc: return random int in range(max-min)
+*/
+int genRandInt(int max, int min){
+    
+    srand(time(NULL));
+    int r = (rand() % (max - min + 1)) + min;
+
+    return r;
+}
+
+/* 
+Input: void
+Output: struct coords c
+Desc: struct coords c with random x and y coords
+*/
+struct coords generateRandCoords(){
+
+    struct coords c;
+    //srand(time(0));
+    double div = RAND_MAX / SO_LATO;
+    c.x = rand() / div;
+    div = RAND_MAX / SO_LATO;
+    c.y = rand() / div;
+
+    return c;
+}
 
 /*
 Input: port's coord array, new random c coords for port
@@ -67,15 +133,27 @@ int arrContains(struct port arr[],struct coords c,int arrLen){
 }
 
 
-
 /*
 Input: void
 Output: returns 0 if successful -1 otherwise
 Desc: Generate SO_PORTI process ports pass it the generated coordinates
 */
 int portGenerator(){
+
+    struct port *ports = malloc(sizeof(struct port)*SO_PORTI);
+
+    int shmPort;
+    if((shmPort = shmget(PORT_POS_KEY,sizeof(ports),IPC_CREAT |IPC_EXCL|0666 )) == -1){
+        fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    ports =  (struct port *) shmat(shmPort,NULL,SHM_RDONLY);
+    if (ports == (void *) -1){
+        fprintf(stderr,"Error assing ports to shared memory, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
     
-    struct port ports[SO_PORTI];
     ports[0].coord.x = ports[0].coord.y = 0; //coord (0,0)
     ports[1].coord.x = ports[1].coord.y = SO_LATO; //coord (SO_LATO,SO_LATO)
     ports[2].coord.x = 0; //coord(0,SO_LATO)
@@ -119,17 +197,16 @@ int portGenerator(){
         }
     }
 
-    
 
     return 0;
 }
 
 /*
-Input: semaphore for start coordination
+Input: void
 Output: returns 0 if successful -1 otherwise
 Desc: Generate SO_NAVI process ships
 */
-int shipGenerator(int sySem){
+int shipGenerator(){
     pid_t fork_ris;
     int i;
     pid_t ship_pid[1];
@@ -159,4 +236,34 @@ int shipGenerator(int sySem){
     return 0;
 }
 
+/*
+Input: void
+Output: returns 0 if successful -1 otherwise
+Desc: deallocate all resources 
+*/
+int deallocateResources(){
+    //SEMAPHORE 
+    int sySem;
+    if((sySem = semget(getpid(),1,IPC_CREAT|IPC_EXCL|0666)) == -1){
+        fprintf(stderr,"Error semaphore opened, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    if((sySem = shmctl(sySem,IPC_RMID,NULL)) == -1){
+        fprintf(stderr,"Error shared memory deallocation, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
 
+
+    //SHARED MEMORY
+    int shmPort;
+    if((shmPort = shmget(PORT_POS_KEY,0,IPC_CREAT |IPC_EXCL|0666 )) == -1){
+        fprintf(stderr,"Error shared memory opened, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    if((shmPort = shmctl(shmPort,IPC_RMID,NULL)) == -1){
+        fprintf(stderr,"Error shared memory deallocation, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+
+}

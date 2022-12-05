@@ -1,25 +1,26 @@
 //Configuration file with all parameters
 
 //GENERALS
-#define SO_DAYS    //number of simulation days
+#define SO_DAYS 30   //number of simulation days
+#define DAY_TIME 1 //day duration in seconds
 
 //PORTS
 #define SO_PORTI 10    //number of ports (int,>= 4)
-#define SO_BANCHINE     //maximum number of docks (int)
-#define SO_FILL         //maximum goods capacity of the port
+#define SO_BANCHINE 5    //maximum number of docks (int)
+#define SO_FILL 10         //maximum goods capacity of the port
 #define SO_LOADSPEED    //loading/unloading speed of ports (ton/days)
 #define SO_DISTANZA 0.1   //minimum distance between two ports
 
 //SHIPS
 #define SO_NAVI  1      //number of ships (int,>=1)
-#define SO_SPEED        //speed of ships (double or int)
+#define SO_SPEED 5       //speed of ships (double or int)
 #define SO_CAPACITY     //capacity of ships (ton)
 
 //GOODS
-#define SO_MERCI        //type of goods (int)
-#define SO_SIZE         //weight of goods (ton)
-#define SO_MIN_VITA     //minimum expiry date (days)
-#define SO_MAX_VITA     //maximum expiry date (days)
+#define SO_MERCI 4        //type of goods (int)
+#define SO_SIZE 10        //weight of goods (ton)
+#define SO_MIN_VITA 3    //minimum expiry date (days)
+#define SO_MAX_VITA 100    //maximum expiry date (days)
 
 //MAP
 #define SO_LATO 10   //side of the map (double)
@@ -29,12 +30,19 @@
 #define SO_SWELL_DURATION   //duration of swell (hours)
 #define SO_MEALSTROM        //mealstrom repeat (hours)
 
+//KEY SHARE MEMORY
+#define PORT_POS_KEY 58    //key for shared memory contains array coords
+
+//KEY MESSAGGE QUEUES
+#define PORT_MASTER_KEY 23    //key for shared memory contains array coords
+
 //CHECK FUNCTION
 /*
 Input: void
 Output: void
 Desc: check define value of file config.h
 */
+
 #define PARAM_CHECK 
         void checkParams(){
         if(SO_PORTI<4){
@@ -62,21 +70,5 @@ Desc: check define value of file config.h
 					   errno,\
 					   strerror(errno));}
 
-//RANDOM COORDS GENERATOR FUNCTION
-/* 
-Input: void
-Output: struct coords c
-Desc: struct coords c with random x and y coords
-*/
-struct coords generateRandCoords(){
 
-    struct coords c;
-    //srand(time(0));
-    double div = RAND_MAX / SO_LATO;
-    c.x = rand() / div;
-    div = RAND_MAX / SO_LATO;
-    c.y = rand() / div;
-
-    return c;
-}
 
