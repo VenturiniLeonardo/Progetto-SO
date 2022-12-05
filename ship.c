@@ -87,6 +87,8 @@ int main(){
 
 
 //Functions definitions
+
+
 struct coords generateRandCoords(){
 
     struct coords c;

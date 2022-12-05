@@ -44,6 +44,7 @@ int main(){
     portGenerator();
     shipGenerator();
 
+    //alarm set and creation
     int shmPort;
     if((shmPort = shmget(PORT_POS_KEY,0,IPC_CREAT |IPC_EXCL|0666 )) == -1){
         fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
@@ -60,17 +61,20 @@ int main(){
     int index=genRandInt(0,SO_PORTI-1);
     kill(SIGALRM,ports[index].pidPort);
     TEST_ERROR;
-    //alarm set and creation
-    /*
-    int elapsedDays=0;  //elapsed days
-    while(elapsed<=30){
     
-    elapsedDays++;
+    int elapsedDays=0;  //elapsed days
+
+    while(elapsedDays<=SO_DAYS){
+        int index=genRandInt(0,SO_PORTI-1);
+        kill(SIGALRM,ports[index].pidPort);
+        TEST_ERROR;
+        
+        elapsedDays++;
 
     alarm(DAY_TIME);
-    //call dump
     
-    }*/
+    }
+    //call dump
 
     sleep(10);
     deallocateResources();

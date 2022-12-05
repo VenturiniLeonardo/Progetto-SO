@@ -19,9 +19,12 @@ typedef struct good{
     int type;
     int quantity;
     int date_expiry;
+    struct good* next;
 }structGood;
 
-
-typedef struct supplyDemand{
+typedef struct supplyDemandPending{
+    struct good *supply;
+    struct good *demand;
+    struct good *pending;
     
 } structSupplyDemand;
