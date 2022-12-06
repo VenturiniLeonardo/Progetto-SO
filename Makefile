@@ -4,25 +4,25 @@
 
 # Compiler settings - Can be customized.
 CC=gcc
-CFLAGS=-std=c89 -Wpedantic
+CFLAGS=-std=c89 -Wpedantic -D_POSIX_C_SOURCE=199309L
 
 ########################################################################
 ####################### Targets beginning here #########################
 ########################################################################
 
 all: master.o port.o ship.o
-	$(CC) ship.o -o ship 
-	$(CC) port.o -o port 
-	$(CC) master.o -o master 
+	$(CC)  ship.o -o ship 
+	$(CC)  port.o -o port 
+	$(CC)  master.o -o master 
 
 master.o:
-	$(CC) -c master.c 
+	$(CC) $(CFLAGS) -c master.c 
 
 port.o:
-	$(CC) -c port.c 
+	$(CC) $(CFLAGS) -c port.c 
 
 ship.o:
-	$(CC) -c ship.c 
+	$(CC) $(CFLAGS) -c ship.c 
 
 clean:
 	rm -f *.o

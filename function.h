@@ -1,4 +1,4 @@
-//CHECK FUNCTION
+/*CHECK FUNCTION
 /*
 Input: void
 Output: void
@@ -23,7 +23,7 @@ Desc: check define value of file config.h
         /*TODO: check di quante permutazioni ci sono per verificare che ci stiano SO_PORTI nella mappa*/
 }
 
-//TEST ERROR FUNCTION
+/*TEST ERROR FUNCTION
 #define TEST_ERROR  if(errno) {fprintf(stderr, \
                             "%s:%d: PID=%5d: Error %d (%s)\n",\
 					   __FILE__,\
@@ -32,7 +32,7 @@ Desc: check define value of file config.h
 					   errno,\
 					   strerror(errno));}
 
-//RANDOM COORDS GENERATOR FUNCTION
+/*RANDOM COORDS GENERATOR FUNCTION
 /* 
 Input: void
 Output: struct coords c
@@ -42,7 +42,7 @@ Desc: struct coords c with random x and y coords
 struct coords generateRandCoords(){
 
     struct coords c;
-    //srand(time(0));
+    /*srand(time(0));
     double div = RAND_MAX / SO_LATO;
     c.x = rand() / div;
     div = RAND_MAX / SO_LATO;
