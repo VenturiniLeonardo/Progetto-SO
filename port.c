@@ -22,21 +22,32 @@ int generatorDock();
 int generatorDemand();
 int generatorSupply();
 void reloadExpiryDate();
+void deallocateResources();
 
 //Handler
-void alarmHandler(int sig){
-    if(generatorSupply()){
-        printf(stderr,"Error queue demand, %d: %s\n",errno,strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-    reloadExpiryDate();
+void signalHaldler(int signal) {
+  switch (signal) {
+    case SIGALRM:
+        if(generatorSupply())
+            TEST_ERROR;
+        break;
+    case SIGUSR1:
+        
+        break;
+    case SIGTERM:
+        deallocateResources();
+        end = 1;
+        break;
+  }
 }
+
 
 int mqDemand;
 int typeGoods[SO_MERCI];
 int typeGoodsOffer[SO_MERCI];
 int quantityDemand;
 int quantitySupply;
+int end = 0;
 
 //Port Main
 int main(int argc, char **argv){
@@ -54,7 +65,7 @@ int main(int argc, char **argv){
         fprintf(stderr, "%s: %d. Error in shmget #%03d: %s\n", __FILE__, __LINE__, errno, strerror(errno));
     exit(EXIT_FAILURE);
     }
-
+    
     
     */
 
@@ -71,15 +82,24 @@ int main(int argc, char **argv){
     }
 
     //SIGNAL ALARM
-    struct sigaction sAllarm;
+    struct sigaction sa;
+
+    sigset_t mask_ALRM_TERM_USR1;
+    sigemptyset(&mask_ALRM_TERM_USR1);                 
+    sigaddset(&mask_ALRM_TERM_USR1, SIGINT);  
+    sigaddset(&mask_ALRM_TERM_USR1, SIGUSR1); 
+
+    sigset_t mask;
+    sigemptyset(&mask);
+
+    sa.sa_mask = mask;
+    sa.sa_handler = signalHaldler;
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGUSR1, &sa, NULL);
+    sigaction(SIGALRM, &sa, NULL);
     
-    bzero(&sAllarm, sizeof(sAllarm));
-    sAllarm.sa_handler = alarmHandler;
-    if(sigaction(SIGALRM,&sAllarm,NULL) == -1){
-        printf("Errore Handler Allar\n");
-        exit(EXIT_FAILURE);
-    }
-    
+    sigprocmask(SIG_SETMASK, &mask_ALRM_TERM_USR1, NULL);
 
     //MESSAGGE QUEUE FOR DEMAND
     if((mqDemand = msgget(getpid(),IPC_CREAT | IPC_EXCL | 0666)) == -1){
@@ -113,10 +133,13 @@ int main(int argc, char **argv){
     sops.sem_flg=0;
     semop(sySem,&sops,1); 
 
-
+    //WAIT SIGNAL
+    do{
+        sigsuspend(&mask);
+    }while(!end);
     
-    
 
+    return 0;
 }
 
 
@@ -201,4 +224,19 @@ int generatorDemand(){
 
     return 0;
 
+}
+
+/*
+Input: void
+Output: void
+Desc: deallocate all resources
+*/
+void deallocateResources(){
+    int semDock = semget(getpid(),1,IPC_CREAT | IPC_EXCL|0600);
+    semctl(semDock,1,IPC_RMID);
+    TEST_ERROR;
+
+    int queMes = msgget(getpid(),IPC_CREAT | IPC_EXCL | 0666);
+    msgclt(queMes,IPC_RMID);
+    TEST_ERROR;
 }
