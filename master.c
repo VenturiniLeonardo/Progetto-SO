@@ -1,4 +1,4 @@
-//System libraries
+       //System libraries
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h> // For portability
@@ -28,7 +28,7 @@ int genRandInt(int,int);
 int main(){
     checkParams();
     
-    //Semaphore creation
+    //Semaphore for coordinate
     int sySem;
     if((sySem = semget(getpid(),1,IPC_CREAT|IPC_EXCL|0666)) == -1){
         fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
@@ -44,7 +44,49 @@ int main(){
     portGenerator();
     shipGenerator();
 
+    //Sem for dump
+
+    int sem_dump;
+
+    if((sySem = semget(DUMP_KEY,3,IPC_CREAT|IPC_EXCL|0666)) == -1){
+        fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    
+    if(semctl(sySem,0,SETVAL,1)<0){
+        fprintf(stderr,"Error initializing semaphore, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    if(semctl(sySem,1,SETVAL,1)<0){
+        fprintf(stderr,"Error initializing semaphore, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    if(semctl(sySem,2,SETVAL,1)<0){
+        fprintf(stderr,"Error initializing semaphore, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    //Shared memory for dump of goods
+
+    int shm_dump_goods;
+    if((shm_dump_goods = shmget(GOODS_SHM_KEY,0,IPC_CREAT |IPC_EXCL|0666 )) == -1){
+        fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    struct goods_dump* struct_goods_dump;
+    struct_goods_dump=(struct goods_dump*) shmat(shm_dump_goods,NULL,NULL);
+    TEST_ERROR;
+    
+    //Shared memory for dump of ship
+
+    int shm_dump_ship;
+    
+
+
+
+
     //alarm set and creation
+
     int shmPort;
     if((shmPort = shmget(PORT_POS_KEY,0,IPC_CREAT |IPC_EXCL|0666 )) == -1){
         fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
@@ -271,3 +313,4 @@ int deallocateResources(){
 
 
 }
+

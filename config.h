@@ -32,9 +32,12 @@
 
 //KEY SHARE MEMORY
 #define PORT_POS_KEY 58    //key for shared memory contains array coords
-
+#define GOODS_SHM_KEY 30
 //KEY MESSAGGE QUEUES
 #define PORT_MASTER_KEY 23    //key for shared memory contains array coords
+ 
+//KEY SEMAPHORE
+#define DUMP_KEY 42
 
 //CHECK FUNCTION
 /*
@@ -60,6 +63,7 @@ Desc: check define value of file config.h
 
         /*TODO: check di quante permutazioni ci sono per verificare che ci stiano SO_PORTI nella mappa*/
 }
+
 
 //TEST ERROR FUNCTION
 #define TEST_ERROR  if(errno) {fprintf(stderr, \

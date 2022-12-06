@@ -22,9 +22,19 @@ typedef struct good{
     struct good* next;
 }structGood;
 
-typedef struct supplyDemandPending{
-    struct good *supply;
-    struct good *demand;
-    struct good *pending;
-    
-} structSupplyDemand;
+typedef struct msgDemand{
+    short type;
+    int quantity;
+}structMsgDemand;
+
+typedef struct goods_states{
+    int goods_in_port;
+    int goods_on_ship;
+    int goods_delivered;
+    int goods_expired_port;
+    int goods_expired_ship;
+}struct_goods_states;
+
+typedef struct goods_dump{
+    struct goods_states [SO_MERCI];
+}struct_goods_dump;

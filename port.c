@@ -19,21 +19,44 @@
 
 //Function declaration
 int generatorDock();
-void generatorSupply();
+int generatorDemand();
+int generatorSupply();
 void reloadExpiryDate();
 
 //Handler
 void alarmHandler(int sig){
-    generatorSupply();
+    if(generatorSupply()){
+        printf(stderr,"Error queue demand, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
     reloadExpiryDate();
 }
 
-struct supplyDemandPending *sdp;
+int mqDemand;
+int typeGoods[SO_MERCI];
+int typeGoodsOffer[SO_MERCI];
+int quantityDemand;
+int quantitySupply;
 
 //Port Main
 int main(int argc, char **argv){
     int nDocks = generatorDock();
     int currFill = 0;
+    int quantityDemand = 0;
+    int quantitySupply = 0;
+    int shid_offer;
+    
+
+    //SHM creation for offer
+    /*
+    shid_offer=shmget(getpid(),SO_MERCI*sizeof(good), S_IRUSR | S_IWUSR);
+    if(shid_offer==-1){
+        fprintf(stderr, "%s: %d. Error in shmget #%03d: %s\n", __FILE__, __LINE__, errno, strerror(errno));
+    exit(EXIT_FAILURE);
+    }
+
+    
+    */
 
     //Semaphore creation
     int dockSem;
@@ -57,22 +80,25 @@ int main(int argc, char **argv){
         exit(EXIT_FAILURE);
     }
     
-    //SHARED MEMORY
-    int shmPort;
-    if((shmPort = shmget(getpid(),sizeof(sdp),IPC_CREAT |IPC_EXCL|0666 )) == -1){
-        fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
+
+    //MESSAGGE QUEUE FOR DEMAND
+    if((mqDemand = msgget(getpid(),IPC_CREAT | IPC_EXCL | 0666)) == -1){
+        fprintf(stderr,"Error initializing messagge queue for demand, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
 
-    sdp =  (struct supplyDemandPending *) shmat(shmPort,NULL,0);
-    if ( sdp == (void *) -1){
-        fprintf(stderr,"Error assing goods to ports shared memory, %d: %s\n",errno,strerror(errno));
+    //GENERATE SUPPLY AND DEMAND
+
+    if(generatorSupply()){
+        printf(stderr,"Error queue demand, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
 
-    sdp->supply  = NULL;
-    sdp->demand  = NULL;
-    sdp->pending  = NULL;
+    if(generatorDemand()){
+        printf(stderr,"Error queue demand, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
 
     /*Sy Semaphore*/
     int sySem;
@@ -89,7 +115,7 @@ int main(int argc, char **argv){
 
 
     
-
+    
 
 }
 
@@ -111,25 +137,27 @@ Input: void
 Output: void
 Desc: rgenerate every day a supply
 */
-void generatorSupply(){
+int generatorSupply(){
 
-    struct good* newGood = malloc(sizeof(struct good));
-    newGood->quantity = SO_FILL/SO_DAYS;
-    newGood->type = (rand() % SO_MERCI)+1;
-    newGood->date_expiry = (rand()%SO_MAX_VITA)+SO_MIN_VITA;
+    struct good newGood;
+    int i = 0;
+    do{
+        newGood.type = (rand() % SO_MERCI)+1;
+        i++;
+    }while(typeGoods[newGood.type] == 1 && i < SO_MERCI);
+    
+    typeGoods[newGood.type] = 1;
 
-    struct good* supplyApp = sdp->supply;
-    if(sdp->supply == NULL){
-        newGood->next = NULL;
-        sdp->supply = newGood;
-    }else{
-        while(supplyApp != NULL && newGood->date_expiry > supplyApp->date_expiry){
-            supplyApp = supplyApp->next;
-        }
-
-        newGood->next = supplyApp->next;
-        supplyApp->next = newGood;
+    if(i == SO_MERCI){
+        return -1;
     }
+    
+    newGood.quantity = SO_FILL/SO_DAYS;
+    if(newGood.quantity > quantitySupply)
+        return -1;
+    quantitySupply += newGood.quantity;
+    newGood.date_expiry = (rand()%SO_MAX_VITA-SO_MIN_VITA)+SO_MIN_VITA;
+    
 
 }
 
@@ -140,29 +168,37 @@ Desc: reload expiry date to every goods
 */
 void reloadExpiryDate(){
     int i;
-    for(i=0;i<sizeof(supplySize);i++){
-        if(sdp->supply[i].date_expiry==0){
-            reload_supplyDemandPending();
 
-        }
-        else sdp->supply[i].date_expiry -= 1;
-        
-    }
-
-    for(i=0;i<sizeof(demandSize);i++){
-        
-        sdp->demand[i].date_expiry -= 1;
-    }
-
-    for(i=0;i<sizeof(pendingSize);i++){
-        sdp->pending[i].date_expiry -= 1;
-    }
 }
 
-void reload_supplyDemandPending(){
-    struct supplyDemandPending * index=sdp;
-    while(index->supply->next!=NULL){
-        index->supply=index->supply->next;
-        index=index->supply->next;
+/*
+Input: void
+Output: void
+Desc: reload expiry date to every goods
+*/
+int generatorDemand(){
+    struct msgDemand msg;
+    int i;
+    do{
+        msg.type = (rand() % SO_MERCI)+1;
+        i++;
+    }while(typeGoods[msg.type] == 1 && i < SO_MERCI);
+    
+    if(i == SO_MERCI){
+        return -1;
     }
+    
+    typeGoods[msg.type] = 1;
+
+    msg.quantity = (rand() % (quantityDemand-SO_FILL))+1;
+    quantityDemand += msg.quantity;
+
+    int sndDemand;
+    if(sndDemand = msgsnd(mqDemand,&msg,sizeof(int),0) == -1){
+        fprintf(stderr,"Error send messagge queue demand, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    return 0;
+
 }
