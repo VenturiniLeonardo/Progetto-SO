@@ -41,11 +41,13 @@ int main(){
     int index;
     int elapsedDays;
     int nRandPort;
+    int RandPort;
     int i;
+    struct sembuf sops; 
 
     checkParams();
     /*Semaphore for coordinate*/
-    if((sySem = semget(getpid(),1,IPC_CREAT|IPC_EXCL|0666)) == -1){
+    if((sySem = semget(SY_KEY,1,IPC_CREAT|IPC_EXCL|0666)) == -1){
         fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
@@ -58,20 +60,30 @@ int main(){
     /*PORT AND SHIP*/
 
     portGenerator();
-    /*shipGenerator();*/
+    shipGenerator();
+
+    sops.sem_num=0;
+    sops.sem_op=-1;
+    sops.sem_flg=0;
+    semop(sySem,&sops,1); 
+
+    printf("START...\n");
 
     elapsedDays=0; /*elapsed days*/
-    kill(ports[0].pidPort,SIGINT);
-
-    srand(time(NULL));   
-    while(elapsedDays<10){
-        nRandPort=(rand()%SO_PORTI);
-        /*for(i=0;i<nRandPort;i++){
-
-        }*/
-        kill(ports[0].pidPort,SIGINT);
+    srand(time(NULL)); 
+    while(elapsedDays<SO_DAYS){
+        nRandPort=rand()%SO_PORTI;    
+        for(i=0;i<nRandPort;i++){
+            RandPort=rand()%SO_PORTI;
+            kill(ports[RandPort].pidPort,SIGALRM);
+            
+        }
         elapsedDays++;
+        sleep(1);
     }
+
+    sleep(10);
+
     /*call dump*/
     deallocateResources();
 }
@@ -179,7 +191,7 @@ int portGenerator(){
                 fprintf(stderr,"Error in fork, %d: %s",errno,strerror(errno));
                 return -1;
             case 0:
-                if(execlp("./port","./port",x,y,NULL) == -1){
+                if(execlp("./port","./port",NULL) == -1){
                     fprintf(stderr,"Error in execlp port numer %d, %d: %s",i,errno,strerror(errno));
                     return -1;
                 }
@@ -225,17 +237,27 @@ Output: returns 0 if successful -1 otherwise
 Desc: deallocate all resources 
 */
 int deallocateResources(){
-/*SEMAPHORE */
+
     int sySem;
     int shmPort;
-    if((sySem = semget(getpid(),1,0666)) == -1){
+    int i;
+
+    /*SEND SIGNAL TO PORT*/
+    for(i=0;i<SO_PORTI;i++){
+        kill(ports[i].pidPort,SIGTERM);
+    }
+
+    /*SEMAPHORE */
+
+    if((sySem = semget(SY_KEY,1,0666)) == -1){
         fprintf(stderr,"Error semaphore opened, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
-    if((sySem = shmctl(sySem,IPC_RMID,NULL)) == -1){
+    if((sySem=semctl(sySem,0,IPC_RMID)) == -1){
         fprintf(stderr,"Error shared memory deallocation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
+
 
     /*SHARED MEMORY*/
 
@@ -243,6 +265,10 @@ int deallocateResources(){
         fprintf(stderr,"Error shared memory opened, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
+
+    shmdt(ports);
+    TEST_ERROR;
+    
     if((shmPort = shmctl(shmPort,IPC_RMID,NULL)) == -1){
         fprintf(stderr,"Error shared memory deallocation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);

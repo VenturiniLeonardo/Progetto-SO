@@ -41,6 +41,7 @@
 
 /*KEY SEMAPHORE*/
 #define DUMP_KEY 42
+#define SY_KEY 1
 
 /*CHECK FUNCTION*/
 /*
@@ -68,7 +69,7 @@ exit(EXIT_FAILURE);
 }
 
 /*TEST ERROR FUNCTION*/
-#define TEST_ERROR if(errno) {fprintf(stderr, \
+#define TEST_ERROR if(errno != 0) {fprintf(stderr, \
 "%s:%d: PID=%5d: Error %d (%s)\n",\
 __FILE__,\
 __LINE__,\

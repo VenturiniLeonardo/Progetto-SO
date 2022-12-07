@@ -29,16 +29,24 @@ int typeGoods[SO_MERCI];
 /*struct good offers[SO_MERCI];*/
 int quantityDemand;
 int quantitySupply;
-int end = 0;
+int end = 1;
 
 /*Handler*/
-void signalHandler(int signal) {
-
+void signalHandler(int signal){
+    switch(signal){
+        case SIGALRM:
+        break;
+        case SIGUSR1:
+        break;
+        case SIGTERM:
+            end = 0;
+        break;
+    }
 }
 
 
 /*Port Main*/
-int main(int argc, char **argv){
+int main(){
     int nDocks = generatorDock();
     int currFill = 0;
     int quantityDemand = 0;
@@ -46,18 +54,14 @@ int main(int argc, char **argv){
     int shid_offer;
     int dockSem;
     struct sigaction sa;
-    sigset_t mask_ALRM_TERM_USR1;
     sigset_t mask;
     struct sembuf sops;
     int sySem;
     int semSupply;
     key_t key_semSupply;
-
     /*Semaphore creation*/
-
     dockSem = semget(getpid(),1,IPC_CREAT|IPC_EXCL|0666);
-        TEST_ERROR;
-    
+    TEST_ERROR;
     if(semctl(dockSem,0,SETVAL,nDocks)<0){
         TEST_ERROR;
     }
@@ -67,19 +71,17 @@ int main(int argc, char **argv){
     semSupply=semget(key_semSupply,1,IPC_CREAT|IPC_EXCL|0666);
     if(semctl(sySem,0,SETVAL,1)==-1){
         TEST_ERROR;
-    }*/
-  
-    /*SIGNAL ALARM
-    sigemptyset(&mask_ALRM_TERM_USR1);                 
-    sigaddset(&mask_ALRM_TERM_USR1, SIGINT);  
-    sigaddset(&mask_ALRM_TERM_USR1, SIGALRM);  
-    sigaddset(&mask_ALRM_TERM_USR1, SIGUSR1); 
-*/
+    }
+    */
     bzero(&sa, sizeof(sa));
     sa.sa_handler = signalHandler;
-    sigaction(SIGINT,&sa,NULL);
+    sigaction(SIGALRM,&sa,NULL);
+    sigaction(SIGUSR1,&sa,NULL);
+    sigaction(SIGTERM,&sa,NULL);
+
+    sigemptyset(&mask);
     
-   /*  sigprocmask(SIG_SETMASK, &mask_ALRM_TERM_USR1, NULL);*/
+    
 
     /*MESSAGGE QUEUE FOR DEMAND*/
     if((mqDemand = msgget(getpid(),IPC_CREAT | IPC_EXCL | 0666)) == -1){
@@ -96,7 +98,7 @@ int main(int argc, char **argv){
     */
 
     /*GENERATE SUPPLY AND DEMAND*/
-
+    /*
     if(generatorSupply()){
         fprintf(stderr,"Error queue demand, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
@@ -106,24 +108,29 @@ int main(int argc, char **argv){
         fprintf(stderr,"Error queue demand, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
-
+    */
     /*Sy Semaphore*/
-    if((sySem = semget(getppid(),1,IPC_CREAT|IPC_EXCL|0666)) == -1){
+    if((sySem = semget(SY_KEY,1,0666)) == -1){
         fprintf(stderr,"Error sy semaphore creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
+
     
     sops.sem_num=0;
     sops.sem_op=-1;
     sops.sem_flg=0;
     semop(sySem,&sops,1); 
 
+    sops.sem_op=0;
+    semop(sySem,&sops,1);
+    
+
     /*WAIT SIGNAL*/
     do{
         sigsuspend(&mask);
-    }while(!end);
+    }while(end);
     
-
+    deallocateResources();
     return 0;
 }
 
@@ -245,11 +252,9 @@ void deallocateResources(){
     int semDock;
     int queMes;
 
-    semDock = semget(getpid(),1,IPC_CREAT | IPC_EXCL|0600);
-    semctl(semDock,1,IPC_RMID);
-    TEST_ERROR;
+    semDock = semget(getpid(),1,0666);
+    semctl(semDock,0,IPC_RMID);
 
-    queMes = msgget(getpid(),IPC_CREAT | IPC_EXCL | 0666);
+    queMes = msgget(getpid(),0666);
     msgctl(queMes,IPC_RMID,NULL);
-    TEST_ERROR;
 }

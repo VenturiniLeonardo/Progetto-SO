@@ -47,7 +47,7 @@ int main(){
     }
 
     /*Sy Semaphore*/
-    if((sySem = semget(getppid(),1,0666)) == -1){
+    if((sySem = semget(SY_KEY,1,0666)) == -1){
         fprintf(stderr,"Error sy semaphore creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
@@ -56,6 +56,9 @@ int main(){
     sops.sem_op=-1;
     sops.sem_flg=0;
     semop(sySem,&sops,1); 
+
+    sops.sem_op=0;
+    semop(sySem,&sops,1);
 
 /*At start Ship goes to nearest port*/
     
@@ -77,7 +80,9 @@ int main(){
 
     }
 
+    do{
 
+    }while(1);
 
     /*
     do{
