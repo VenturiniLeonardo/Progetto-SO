@@ -73,11 +73,11 @@ int main(){
     srand(time(NULL)); 
     while(elapsedDays<SO_DAYS){
         nRandPort=rand()%SO_PORTI;    
-        for(i=0;i<nRandPort;i++){
+        /*for(i=0;i<nRandPort;i++){
             RandPort=rand()%SO_PORTI;
             kill(ports[RandPort].pidPort,SIGALRM);
             
-        }
+        }*/
         elapsedDays++;
         sleep(1);
     }
