@@ -1,18 +1,18 @@
 /*Configuration file with all parameters*/
 
 /*GENERALS*/
-#define SO_DAYS 30 /*number of simulation days*/
+#define SO_DAYS 10 /*number of simulation days*/
 #define DAY_TIME 1 /*day duration in seconds*/
 
 /*PORTS*/
-#define SO_PORTI 10 /*number of ports (int,>= 4)*/
+#define SO_PORTI 5 /*number of ports (int,>= 4)*/
 #define SO_BANCHINE 5 /*maximum number of docks (int)*/
 #define SO_FILL 10 /*maximum goods capacity of the port*/
 #define SO_LOADSPEED /*loading/unloading speed of ports (ton/days)*/
 #define SO_DISTANZA 0.1 /*minimum distance between two ports*/
 
 /*SHIPS*/
-#define SO_NAVI 1 /*number of ships (int,>=1)*/
+#define SO_NAVI 5 /*number of ships (int,>=1)*/
 #define SO_SPEED 5 /*speed of ships (double or int)*/
 #define SO_CAPACITY /*capacity of ships (ton)*/
 
@@ -38,6 +38,7 @@
 
 /*KEY MESSAGGE QUEUES*/
 #define PORT_MASTER_KEY 23 /*key for shared memory contains array coords*/
+
 /*KEY SEMAPHORE*/
 #define DUMP_KEY 42
 

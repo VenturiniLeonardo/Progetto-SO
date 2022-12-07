@@ -26,26 +26,14 @@ void deallocateResources();
 
 int mqDemand;
 int typeGoods[SO_MERCI];
-int typeGoodsOffer[SO_MERCI];
+/*struct good offers[SO_MERCI];*/
 int quantityDemand;
 int quantitySupply;
 int end = 0;
 
 /*Handler*/
-void signalHaldler(int signal) {
-  switch (signal) {
-    case SIGALRM:
-        if(generatorSupply())
-            TEST_ERROR;
-        break;
-    case SIGUSR1:
-        
-        break;
-    case SIGTERM:
-        deallocateResources();
-        end = 1;
-        break;
-  }
+void signalHandler(int signal) {
+
 }
 
 
@@ -62,37 +50,36 @@ int main(int argc, char **argv){
     sigset_t mask;
     struct sembuf sops;
     int sySem;
+    int semSupply;
+    key_t key_semSupply;
 
     /*Semaphore creation*/
 
-    if((dockSem = semget(getpid(),2,IPC_CREAT|IPC_EXCL|0600)) == -1){
-        fprintf(stderr,"Error docks semaphore creation, %d: %s\n",errno,strerror(errno));
-        exit(EXIT_FAILURE);
-    }
+    dockSem = semget(getpid(),1,IPC_CREAT|IPC_EXCL|0666);
+        TEST_ERROR;
     
     if(semctl(dockSem,0,SETVAL,nDocks)<0){
-        fprintf(stderr,"Error initializing docks semaphore, %d: %s\n",errno,strerror(errno));
-        exit(EXIT_FAILURE);
+        TEST_ERROR;
     }
-    if(semctl(dockSem,1,SETVAL,1)<0){
-        fprintf(stderr,"Error initializing docks semaphore, %d: %s\n",errno,strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-    /*SIGNAL ALARM*/
+
+    /*Sem creation for Supply 
+    key_semSupply=ftok("/",getpid());
+    semSupply=semget(key_semSupply,1,IPC_CREAT|IPC_EXCL|0666);
+    if(semctl(sySem,0,SETVAL,1)==-1){
+        TEST_ERROR;
+    }*/
+  
+    /*SIGNAL ALARM
     sigemptyset(&mask_ALRM_TERM_USR1);                 
     sigaddset(&mask_ALRM_TERM_USR1, SIGINT);  
+    sigaddset(&mask_ALRM_TERM_USR1, SIGALRM);  
     sigaddset(&mask_ALRM_TERM_USR1, SIGUSR1); 
-
-    sigemptyset(&mask);
-
-    sa.sa_mask = mask;
-    sa.sa_handler = signalHaldler;
-    sa.sa_flags = 0;
-    sigaction(SIGINT, &sa, NULL);
-    sigaction(SIGUSR1, &sa, NULL);
-    sigaction(SIGALRM, &sa, NULL);
+*/
+    bzero(&sa, sizeof(sa));
+    sa.sa_handler = signalHandler;
+    sigaction(SIGINT,&sa,NULL);
     
-    sigprocmask(SIG_SETMASK, &mask_ALRM_TERM_USR1, NULL);
+   /*  sigprocmask(SIG_SETMASK, &mask_ALRM_TERM_USR1, NULL);*/
 
     /*MESSAGGE QUEUE FOR DEMAND*/
     if((mqDemand = msgget(getpid(),IPC_CREAT | IPC_EXCL | 0666)) == -1){
@@ -103,6 +90,10 @@ int main(int argc, char **argv){
     /*SHM creation for offer*/
     shid_offer=shmget(getpid(),SO_MERCI*sizeof(struct good), IPC_CREAT | IPC_EXCL | 0666);
     TEST_ERROR;
+    /*
+    offers = (good *)shmat(shmid, 0, 0);
+    offers = malloc(sizeof(good)*SO_MERCI);
+    */
 
     /*GENERATE SUPPLY AND DEMAND*/
 
@@ -145,7 +136,6 @@ Output: int
 Desc: return random int between 1 and SO_BANCHINE
 */
 int generatorDock(){
-    srand(time(NULL));
     return (rand()%SO_BANCHINE)+1;
 }
 
@@ -155,24 +145,19 @@ Output: void
 Desc: rgenerate every day a supply
 */
 int generatorSupply(){
-    int supplySem;
     int shmSupply;
-    struct good *supply;
-    struct sembuf sops[2]; 
-    int sem_supply;
+    struct good *supply[SO_MERCI];
+    int semSupply;
     struct good newGood;
     int i = 0;
+    key_t key_semSupply;
+    struct sembuf sops;
 
-    supplySem = semget(getpid(),2,IPC_CREAT|IPC_EXCL|0666);
-    TEST_ERROR;
-    sem_supply=semget(getpid(),1,IPC_CREAT|IPC_EXCL|0666);
-    TEST_ERROR;
-    sops[1].sem_num=1;
-    sops[1].sem_op=-1;
-    sops[1].sem_flg=0;
-    if(semop(sem_supply,sops,2)==-1){
-        TEST_ERROR;
-    } 
+    /*key_semSupply=ftok("/",getpid());
+    semSupply=semget(key_semSupply,1,IPC_CREAT|IPC_EXCL|0666);
+    TEST_ERROR;*/
+    
+
 
     do{
         newGood.type = (rand() % SO_MERCI)+1;
@@ -186,17 +171,24 @@ int generatorSupply(){
     }
     
     newGood.quantity = SO_FILL/SO_DAYS;
-    if(newGood.quantity > quantitySupply)
+    if(newGood.quantity > SO_FILL-quantitySupply)
         return -1;
     quantitySupply += newGood.quantity;
+    srand(getpid());
     newGood.date_expiry = (rand()%SO_MAX_VITA-SO_MIN_VITA)+SO_MIN_VITA;
 
     /*INSERT SUPPLY INTO SHM*/
+    sops.sem_num=1;
+    sops.sem_op=-1;
+    sops.sem_flg=0;
+    /*if(semop(ftok("/",getpid()),&sops,1)==-1)
+        TEST_ERROR;
+
     shmSupply = shmget(getpid(),0,IPC_CREAT | IPC_EXCL | 0666);
-    supply = (struct good*)shmat(shmSupply,NULL,0);
+    supply = (struct good *)shmat(shmSupply,NULL,0);
     if(supply == (void *) -1)
         TEST_ERROR;
-    supply[newGood.type] = newGood;
+    supply[newGood.type] = newGood;*/
 
 
 }
@@ -230,7 +222,7 @@ int generatorDemand(){
     }
     
     typeGoods[msg.type] = 1;
-
+    srand(getpid());
     msg.quantity = (rand() % (quantityDemand-SO_FILL))+1;
     quantityDemand += msg.quantity;
 
@@ -242,10 +234,6 @@ int generatorDemand(){
     return 0;
 
 }
-
-
-
-
 
 
 /*
@@ -262,6 +250,6 @@ void deallocateResources(){
     TEST_ERROR;
 
     queMes = msgget(getpid(),IPC_CREAT | IPC_EXCL | 0666);
-    msgclt(queMes,IPC_RMID);
+    msgctl(queMes,IPC_RMID,NULL);
     TEST_ERROR;
 }

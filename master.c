@@ -24,6 +24,8 @@ int arrContains(struct port [],struct coords ,int );
 int deallocateResources();
 int genRandInt(int,int);
 
+struct port *ports; 
+
 /*Master main*/
 int main(){
     
@@ -36,91 +38,41 @@ int main(){
     int shm_dump_ship;
     struct ship_dump* struct_ship_dump;
     int shmPort;
-    struct port *ports;
     int index;
     int elapsedDays;
+    int nRandPort;
+    int i;
+
     checkParams();
     /*Semaphore for coordinate*/
     if((sySem = semget(getpid(),1,IPC_CREAT|IPC_EXCL|0666)) == -1){
-    fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
-    exit(EXIT_FAILURE);
-    }
-    if(semctl(sySem,0,SETVAL,SO_NAVI+SO_PORTI+1)<0){
-    fprintf(stderr,"Error initializing semaphore, %d: %s\n",errno,strerror(errno));
-    exit(EXIT_FAILURE);
-    }
-
-    portGenerator();
-    shipGenerator();
-
-        /*Sem for dump*/
-
-    if((sySem = semget(DUMP_KEY,3,IPC_CREAT|IPC_EXCL|0666)) == -1){
         fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
-    if(semctl(sySem,0,SETVAL,1)<0){
-        fprintf(stderr,"Error initializing semaphore, %d: %s\n",errno,strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-    if(semctl(sySem,1,SETVAL,1)<0){
-        fprintf(stderr,"Error initializing semaphore, %d: %s\n",errno,strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-    if(semctl(sySem,2,SETVAL,1)<0){
+
+    if(semctl(sySem,0,SETVAL,SO_NAVI+SO_PORTI+1)<0){
         fprintf(stderr,"Error initializing semaphore, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
 
-    /*Shared memory for dump of goods*/
+    /*PORT AND SHIP*/
 
-    if((shm_dump_goods = shmget(GOODS_DUMP_KEY,0,IPC_CREAT |IPC_EXCL|0666 )) == -1){
-        fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-
-    struct_goods_dump=(struct goods_dump*) shmat(shm_dump_goods,NULL,0);
-    TEST_ERROR;
-    /*Shared memory for dump of port*/
-
-    shm_dump_port=shmget(PORT_DUMP_KEY,0,IPC_CREAT |IPC_EXCL|0666);
-    TEST_ERROR;
-    struct_port_dump=(struct port_dump*)shmat(shm_dump_port,NULL,0);
-    TEST_ERROR;
-
-    /*Shared memory for dump of ship*/
-
-    shm_dump_ship=shmget(SHIP_DUMP_KEY,0,IPC_CREAT |IPC_EXCL|0666);
-    TEST_ERROR;
-    struct_ship_dump=(struct ship_dump*)shmat(shm_dump_ship,NULL,0);
-    TEST_ERROR;
-
-    /*alarm set and creation*/
-
-    if((shmPort = shmget(PORT_POS_KEY,0,IPC_CREAT |IPC_EXCL|0666 )) == -1){
-        fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-    ports=(struct port *) shmat(shmPort,NULL,SHM_RDONLY);
-    if (ports == (void *) -1){
-        fprintf(stderr,"Error assing ports to shared memory, %d: %s\n",errno,strerror(errno));
-        exit(EXIT_FAILURE);
-    }
+    portGenerator();
+    /*shipGenerator();*/
 
     elapsedDays=0; /*elapsed days*/
+    kill(ports[0].pidPort,SIGINT);
 
-    while(elapsedDays<=SO_DAYS){
-        index=genRandInt(0,SO_PORTI-1);
-        
-        kill(SIGALRM,ports[index].pidPort);
-        TEST_ERROR;
+    srand(time(NULL));   
+    while(elapsedDays<10){
+        nRandPort=(rand()%SO_PORTI);
+        /*for(i=0;i<nRandPort;i++){
+
+        }*/
+        kill(ports[0].pidPort,SIGINT);
         elapsedDays++;
-
-        alarm(DAY_TIME);
     }
     /*call dump*/
-
-    sleep(10);
     deallocateResources();
 }
 
@@ -133,7 +85,7 @@ Desc: return random int in range(max-min)
 */
 int genRandInt(int max, int min){
     int r;
-    srand(time(NULL));
+    srand(getpid());
     r = (rand()%(max-min+1))+min;
     return r;
 }
@@ -147,7 +99,7 @@ struct coords generateRandCoords(){
 
     struct coords c;
     double div;
-    srand(time(NULL));
+    srand(getpid());
     div = RAND_MAX / SO_LATO;
     c.x = rand() / div;
     div = RAND_MAX / SO_LATO;
@@ -185,7 +137,6 @@ Desc: Generate SO_PORTI process ports pass it the generated coordinates
 */
 int portGenerator(){
 
-    struct port *ports; 
     struct coords myC;
     int i;
     int shmPort;
@@ -193,34 +144,33 @@ int portGenerator(){
     char y[50];
     pid_t sonPid;
 
-    ports = malloc(sizeof(struct port)*SO_PORTI);
-
-
-    if((shmPort = shmget(PORT_POS_KEY,sizeof(ports),IPC_CREAT |IPC_EXCL|0666 )) == -1){
+    if((shmPort = shmget(PORT_POS_KEY,sizeof(struct port)*SO_PORTI,IPC_CREAT|IPC_EXCL|0666 )) == -1){
         fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
-
-    ports = (struct port *) shmat(shmPort,NULL,SHM_RDONLY);
+    ports = (struct port*) shmat(shmPort,NULL,0);
     if (ports == (void *) -1){
         fprintf(stderr,"Error assing ports to shared memory, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
-    ports[0].coord.x = ports[0].coord.y = 0; /*coord (0,0)*/
-    ports[1].coord.x = ports[1].coord.y = SO_LATO; /*coord (SO_LATO,SO_LATO)*/
-    ports[2].coord.x = 0; /*coord(0,SO_LATO)*/
+
+    /*ports=malloc(sizeof(struct port)*SO_PORTI);*/
+    
+    ports[0].coord.x = ports[0].coord.y = 0; 
+    ports[1].coord.x = ports[1].coord.y = SO_LATO; 
+    ports[2].coord.x = 0; 
     ports[2].coord.y = SO_LATO;
-    ports[3].coord.x = SO_LATO; /*coord(SO_LATO,0)*/
+    ports[3].coord.x = SO_LATO; 
     ports[3].coord.y = 0;
 
-
-    for (i=4;i<SO_PORTI;i++){  /*generating SO_PORTI-4 ports*/
+    /*generating SO_PORTI-4 ports*/
+    for (i=4;i<SO_PORTI;i++){  
         do{
             myC=generateRandCoords(); 
         }while(arrContains(ports,myC,i));
         ports[i].coord=myC;
     }
-
+    
     for(i = 0;i < SO_PORTI;i++){
         sprintf(x,"%f", ports[i].coord.x);
         sprintf(y,"%f", ports[i].coord.y);
@@ -249,12 +199,10 @@ Output: returns 0 if successful -1 otherwise
 Desc: Generate SO_NAVI process ships
 */
 int shipGenerator(){
-    pid_t fork_ris;
     int i;
-    pid_t ship_pid[1];
 
     for(i=0;i<SO_NAVI;i++){ 
-        switch(ship_pid[i]=fork()){
+        switch(fork()){
             case -1:
                 fprintf(stderr,"Error in fork , %d: %s \n",errno,strerror(errno));
                 return -1;
@@ -280,7 +228,7 @@ int deallocateResources(){
 /*SEMAPHORE */
     int sySem;
     int shmPort;
-    if((sySem = semget(getpid(),1,IPC_CREAT|IPC_EXCL|0666)) == -1){
+    if((sySem = semget(getpid(),1,0666)) == -1){
         fprintf(stderr,"Error semaphore opened, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
@@ -291,7 +239,7 @@ int deallocateResources(){
 
     /*SHARED MEMORY*/
 
-    if((shmPort = shmget(PORT_POS_KEY,0,IPC_CREAT |IPC_EXCL|0666 )) == -1){
+    if((shmPort = shmget(PORT_POS_KEY,0,0666 )) == -1){
         fprintf(stderr,"Error shared memory opened, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
