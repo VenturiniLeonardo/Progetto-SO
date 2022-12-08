@@ -23,6 +23,11 @@ typedef struct good{
     struct good* next;
 }structGood;
 
+typedef struct shmSinglePort{
+    struct good supply[SO_MERCI];
+    int typeGoods[SO_MERCI][2];
+}structShmSingleSupply;
+
 typedef struct msgDemand{
     short type;
     int quantity;
