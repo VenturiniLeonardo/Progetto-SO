@@ -51,8 +51,6 @@ void signalHandler(int signal){
 int main(){
     int nDocks = generatorDock();
     int currFill = 0;
-    int quantityDemand = 0;
-    int quantitySupply = 0;
     int shm_offer;
     int dockSem;
     struct sigaction sa;
@@ -61,9 +59,12 @@ int main(){
     int sySem;
     int semSupply;
     key_t key_semSupply;
+    key_t key_msgDemand;
     int i;
     int j;
 
+    quantityDemand = 0;
+    quantitySupply = 0;
     /*Semaphore creation docks*/
     dockSem = semget(getpid(),1,IPC_CREAT|IPC_EXCL|0666);
     TEST_ERROR;
@@ -97,10 +98,15 @@ int main(){
     }
 
     /*GENERATE SUPPLY AND DEMAND*/
-    /*
-    generatorSupply();
-    generatorDemand();
-*/
+    if(generatorSupply()){
+        printf("Error generator supply\n");
+    }
+    if(generatorDemand()){
+        printf("Error generator demand\n");
+    }
+
+
+
     /*Handler*/
         
     bzero(&sa, sizeof(sa));
@@ -172,7 +178,9 @@ int generatorSupply(){
     semop(semSupply,&sops,1);
     TEST_ERROR;
 
-    /*do{
+
+    do{
+        srand(getpid());
         newGood.type = (rand() % SO_MERCI)+1;
         i++;
     }while((shmPort->typeGoods[newGood.type][1] == 1 || shmPort->typeGoods[newGood.type][0] == 1) && i < SO_MERCI);
@@ -181,24 +189,28 @@ int generatorSupply(){
     if(i == SO_MERCI){
         return -1;
     }
-*/
 
 
-    /*shmPort->supply[newGood.type] = newGood;
+    shmPort->supply[newGood.type] = newGood;
     shmPort->typeGoods[newGood.type][0] = 1;
-    newGood.quantity = SO_FILL/SO_DAYS;*/
+    newGood.quantity = SO_FILL/SO_DAYS;
     
     if(newGood.quantity > SO_FILL-quantitySupply)
         return -1;
-        
-    newGood.type = 1;
+    
     quantitySupply += newGood.quantity;
     srand(getpid());
     newGood.date_expiry = (rand()%SO_MAX_VITA-SO_MIN_VITA)+SO_MIN_VITA;
     printf("Generata offerta porto %d t: %d q: %d s: %d\n",getpid(),newGood.type,newGood.quantity,newGood.date_expiry);
 
+    sops.sem_num=0;
+    sops.sem_op=1;
+    sops.sem_flg=0;
 
-    exit(EXIT_SUCCESS);
+    semop(semSupply,&sops,1);
+    TEST_ERROR;
+
+    return 0;
 
 }
 
@@ -227,11 +239,21 @@ int generatorDemand(){
     int i;
     int sndDemand;
     struct sembuf sops;
+    int semDemand;
+    key_t key_semDemand;
+
+    key_semDemand=ftok("port.c",getpid());
+    semDemand=semget(key_semDemand,1,0666);
 
     /*INSERT SUPPLY INTO SHM*/
-    sops.sem_num=1;
+    sops.sem_num=0;
     sops.sem_op=-1;
     sops.sem_flg=0;
+
+    semop(semDemand,&sops,1);
+    TEST_ERROR;
+
+    srand(time(NULL));
     
     do{
         msg.type = (rand() % SO_MERCI)+1;
@@ -243,9 +265,9 @@ int generatorDemand(){
     }
     
     shmPort->typeGoods[msg.type][1] = 1;
-    srand(getpid());
+    srand(time(NULL));
 
-    msg.quantity = (rand() % (quantityDemand-SO_FILL))+1;
+    msg.quantity = (rand() % (SO_FILL-quantityDemand))+1;
     quantityDemand += msg.quantity;
 
     if(sndDemand = msgsnd(mqDemand,&msg,sizeof(int),0) == -1){
@@ -253,6 +275,14 @@ int generatorDemand(){
         exit(EXIT_FAILURE);
     }
     printf("Generata domanda porto %d t: %d q: %d\n",getpid(),msg.type,msg.quantity);
+
+    sops.sem_num=0;
+    sops.sem_op=1;
+    sops.sem_flg=0;
+
+    semop(semDemand,&sops,1);
+    TEST_ERROR;
+    
     return 0;
 
 }
@@ -273,6 +303,7 @@ void deallocateResources(){
     shm_offer=shmget(getpid(),sizeof(struct shmSinglePort), IPC_CREAT | IPC_EXCL | 0666);
     TEST_ERROR;  
     shmdt(shmPort);
+    TEST_ERROR;
     shmctl(shm_offer,IPC_RMID,0);
     queMes = msgget(getpid(),0666);
     msgctl(queMes,IPC_RMID,NULL);

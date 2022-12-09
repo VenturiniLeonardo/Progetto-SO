@@ -7,23 +7,23 @@
 /*PORTS*/
 #define SO_PORTI 5 /*number of ports (int,>= 4)*/
 #define SO_BANCHINE 5 /*maximum number of docks (int)*/
-#define SO_FILL 10 /*maximum goods capacity of the port*/
-#define SO_LOADSPEED /*loading/unloading speed of ports (ton/days)*/
-#define SO_DISTANZA 0.1 /*minimum distance between two ports*/
+#define SO_FILL 100 /*maximum goods capacity of the port*/
+#define SO_LOADSPEED 3/*loading/unloading speed of ports (ton/days)*/
+#define SO_DISTANZA 0.0001 /*minimum distance between two ports*/
 
 /*SHIPS*/
 #define SO_NAVI 1 /*number of ships (int,>=1)*/
-#define SO_SPEED 5 /*speed of ships (double or int)*/
-#define SO_CAPACITY /*capacity of ships (ton)*/
+#define SO_SPEED 1 /*speed of ships (double or int)*/
+#define SO_CAPACITY 10/*capacity of ships (ton)*/
 
 /*GOODS*/
-#define SO_MERCI 4 /*type of goods (int)*/
-#define SO_SIZE 10 /*weight of goods (ton)*/
-#define SO_MIN_VITA 3 /*minimum expiry date (days)*/
-#define SO_MAX_VITA 100 /*maximum expiry date (days)*/
+#define SO_MERCI 40 /*type of goods (int)*/
+#define SO_SIZE 100 /*weight of goods (ton)*/
+#define SO_MIN_VITA 1 /*minimum expiry date (days)*/
+#define SO_MAX_VITA 50 /*maximum expiry date (days)*/
 
 /*MAP*/
-#define SO_LATO 10 /*side of the map (double)*/
+#define SO_LATO 40 /*side of the map (double)*/
 
 /*WEATHER EVENTS*/
 #define SO_STORM_DURATION /*duration of storm (hours)*/
@@ -69,7 +69,7 @@ exit(EXIT_FAILURE);
 }
 
 /*TEST ERROR FUNCTION*/
-#define TEST_ERROR if(errno != 0) {fprintf(stderr, \
+#define TEST_ERROR if(errno) {fprintf(stderr, \
 "%s:%d: PID=%5d: Error %d (%s)\n",\
 __FILE__,\
 __LINE__,\

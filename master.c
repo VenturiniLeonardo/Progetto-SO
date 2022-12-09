@@ -68,8 +68,6 @@ int main(){
     semop(sySem,&sops,1); 
 
     printf("START...\n");
-
-    sleep(10);
     
     /*elapsed days
     elapsedDays=0; 
@@ -201,6 +199,7 @@ int portGenerator(){
             break;
             default:
                 ports[i].pidPort = sonPid;
+                printf("%d %f %f\n",sonPid,ports[i].coord.x,ports[i].coord.y);
             break;
         }
     }
