@@ -12,7 +12,7 @@
 #define SO_DISTANZA 0.1 /*minimum distance between two ports*/
 
 /*SHIPS*/
-#define SO_NAVI 5 /*number of ships (int,>=1)*/
+#define SO_NAVI 1 /*number of ships (int,>=1)*/
 #define SO_SPEED 5 /*speed of ships (double or int)*/
 #define SO_CAPACITY /*capacity of ships (ton)*/
 

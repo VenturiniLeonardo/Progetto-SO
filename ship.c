@@ -24,20 +24,22 @@ struct port* getSupply(pid_t);
 struct port* near_ports(struct coords,double);
 struct port* duck_access(int);
 struct coords getCoordFromPid(int);
-int nearPort();
+struct port* nearPort(struct coords);
 
 
 
 struct port *ports;
-struct coords ship_coords;
 
 int main(){
     struct timespec tim;
     int sySem;
     int shmPort;
     struct sembuf sops; 
-    struct port *nextPort;
     int min_distance=SO_LATO*sqrt(2);
+    struct port* nextPort;
+    struct port* currentPort;
+    struct coords ship_coords;
+    int i;
 
     ship_coords=generateRandCoords();
 
@@ -62,24 +64,36 @@ int main(){
     semop(sySem,&sops,1);
 
     /*At start Ship goes to nearest port*/
-    
-    index_min = nearPort();
+    printf("%f %f\n",ship_coords.x,ship_coords.y);
+    currentPort = nearPort(ship_coords);
+    printf("Prossimo porto: %f %f\n",currentPort->coord.x,currentPort->coord.y);
 
     tim.tv_sec=0;
-    tim.tv_nsec=(min_distance/SO_SPEED);
+    tim.tv_nsec=(distance(currentPort->coord.x,currentPort->coord.y,ship_coords.x,ship_coords.y)/SO_SPEED);
     if(nanosleep(&tim,NULL)<0){
         TEST_ERROR;
     }
 
     do{
-        nextPort = duck_access(index_min);
+        printf("Arrivato al porto dopo %ld ns\n",tim.tv_nsec);
+        printf("%d",currentPort->pidPort);
+        nextPort = duck_access(currentPort->pidPort);
+        printf("Prossimo porto %d\n",nextPort->pidPort);
         if(nextPort == NULL){
-            
-        }else{
-            
+            nextPort = nearPort(currentPort->coord);
+         
         }
-        
-    }while(1);
+        printf("Partenza \n");
+        tim.tv_sec=0;
+        tim.tv_nsec=(distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED);
+
+        if(nanosleep(&tim,NULL)<0){
+            TEST_ERROR;
+        }
+        /*implementare scambio */
+        currentPort = nextPort;
+        i++;
+    }while(i<SO_DAYS);
 
 }
 
@@ -91,21 +105,21 @@ Input: void
 Output: int
 Desc: return random int between 1 and SO_BANCHINE
 */
-int nearPort(){
+struct port* nearPort(struct coords ship_coords){
 
     int min_distance=SO_LATO*sqrt(2);
-    int index_min=0;
     int i;
     int ris_distanza;
+    int index_min;
 
     for(i=0;i<SO_NAVI;i++){
         ris_distanza=distance(ports[i].coord.x,ports[i].coord.y,ship_coords.x,ship_coords.y);
         if(ris_distanza<min_distance){
             min_distance=ris_distanza;
-            index_min=i;
+            index_min = i;
         }
     }   
-    return index_min;
+    return &(ports[index_min]);
 }
 
 /*
@@ -182,7 +196,7 @@ struct port* getSupply(pid_t pid_port){
 
         /*Get shm semaphore*/
         supplyKey=ftok("./port.c",pid_port);
-        semSupply = semget(supplyKey,1,IPC_CREAT|IPC_EXCL|0666);
+        semSupply = semget(supplyKey,1,0666);
         TEST_ERROR;
 
         sops.sem_num=0;
@@ -217,9 +231,11 @@ struct port* getSupply(pid_t pid_port){
                     fprintf(stderr,"Error messagge queue demand in ship, %d: %s\n",errno,strerror(errno));
                     exit(EXIT_FAILURE);
                 }
+
                 /*Find goods*/
                 if((findGood = msgrcv(msgDemand,&demandGood,sizeof(struct good),type,0)) != -1){
                     sendPort = &(portNear[i]);
+                    printf("Found goods\n");
                     break;
                 }
 
@@ -285,25 +301,18 @@ struct port* near_ports(struct coords port_coords,double max_distance){
     
 
 
-struct port* duck_access(int index_min){
-    int shmPort;
-    struct port *ports;
-    pid_t port_access;
+struct port* duck_access(pid_t pidPort){
+    struct port* ports;
     int dockSem;
     struct sembuf sops; 
     int res_Supply;
     struct port *ret_get_supply;
-    shmPort = shmget(PORT_POS_KEY,0,0666);
-    TEST_ERROR;
-    ports=(struct port *) shmat(shmPort,NULL,SHM_RDONLY);
-    TEST_ERROR;
 
-    port_access=ports[index_min].pidPort;
-    dockSem = semget(port_access,1,IPC_CREAT|IPC_EXCL|0666);
+    dockSem = semget(pidPort,1,0666);
     TEST_ERROR;
     sops.sem_op=-1;
     semop(dockSem,&sops,1);
-    ret_get_supply = getSupply(port_access);
+    ret_get_supply = getSupply(pidPort);
     sops.sem_op=1;
     semop(dockSem,&sops,1);
 

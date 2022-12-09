@@ -20,7 +20,6 @@ typedef struct good{
     int type;
     int quantity;
     int date_expiry;
-    struct good* next;
 }structGood;
 
 typedef struct shmSinglePort{

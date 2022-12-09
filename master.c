@@ -68,15 +68,17 @@ int main(){
     semop(sySem,&sops,1); 
 
     printf("START...\n");
+
+    sleep(10);
     
-    /*elapsed days*/
+    /*elapsed days
     elapsedDays=0; 
     srand(time(NULL)); 
     while(elapsedDays<SO_DAYS){
         nRandPort=rand()%SO_PORTI;    
         for(i=0;i<nRandPort;i++){ 
             RandPort=rand()%SO_PORTI;
-            /*kill(ports[RandPort].pidPort,SIGALRM);*/
+            //kill(ports[RandPort].pidPort,SIGALRM);
             
         }
         elapsedDays++;
@@ -84,9 +86,9 @@ int main(){
     }
 
     sleep(10);
-
+    */
     /*call dump*/
-    deallocateResources();
+    /*deallocateResources();*/
 }
 
 /*Functions definitions*/
