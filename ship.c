@@ -254,7 +254,7 @@ struct port* getSupply(pid_t pid_port){
             return sendPort;
         }
 
-        printf("%d %d %d\n",shmPort->supply[i].type,shmPort->supply[i].quantity,shmPort->supply[i].date_expiry);
+       /* printf("%d %d %d\n",shmPort->supply[i].type,shmPort->supply[i].quantity,shmPort->supply[i].date_expiry);*/
         /*Set min exipry to prev min exipry*/
         min_exipry_prev = min_exipry;
         min_exipry = SO_MAX_VITA+1;
@@ -275,20 +275,25 @@ struct port* getSupply(pid_t pid_port){
                 if((findGood = msgrcv(msgDemand,&demandGood,sizeof(struct good),type,0)) != -1){
                     sendPort = &(portNear[i]);
                     if(shmPort->supply[type].quantity>=demandGood.quantity){
-                        if(shmPort->supply[type].quantity<=SO_CAPACITY){
-                            demandGood.quantity=0;
-                            /*termina lore */
+                        if(demandGood.quantity<=SO_CAPACITY){
+                            shmPort->supply[type].quantity-=demandGood.quantity;
                         }else{
-                            
+                            shmPort->supply[type].quantity-=SO_CAPACITY;
+                            demandGood.quantity -= SO_CAPACITY;
+                            msgsnd(msgDemand,&demandGood,sizeof(struct good),0);
                         }
                     }else{
-                        shmPort->supply[type].date_expiry = -1;
-                        shmPort->typeGoods[type][0] = 0;
-                        demandGood.quantity -= shmPort->supply[type].quantity;
-                        
-                        msgsnd(msgDemand,&demandGood,sizeof(struct good),0);
-                        
-                    }
+                        if(shmPort->supply[type].quantity<=SO_CAPACITY){
+                            shmPort->supply[type].date_expiry = -1;
+                            shmPort->typeGoods[type][0] = 0;
+                            demandGood.quantity -= shmPort->supply[type].quantity;
+                            msgsnd(msgDemand,&demandGood,sizeof(struct good),0);
+                        }
+                        else{
+                            shmPort->supply[type].quantity-=SO_CAPACITY;    
+                            demandGood.quantity -= SO_CAPACITY;
+                            msgsnd(msgDemand,&demandGood,sizeof(struct good),0);                       
+                        }
 
                     printf("Found goods\n");
                     break;
