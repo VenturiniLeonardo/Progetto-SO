@@ -56,6 +56,12 @@ int main(){
         exit(EXIT_FAILURE);
     }
 
+    /*Sy Semaphore*/
+    if((sySem = semget(SY_KEY,1,0666)) == -1){
+        fprintf(stderr,"Error sy semaphore creation, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
     sops.sem_num=0;
     sops.sem_op=-1;
     sops.sem_flg=0;
