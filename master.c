@@ -66,7 +66,8 @@ int main(){
     sops.sem_op=-1;
     sops.sem_flg=0;
     semop(sySem,&sops,1); 
-
+    sops.sem_op=0;
+    semop(sySem,&sops,1);
     printf("START...\n");
     
     /*elapsed days
