@@ -28,7 +28,7 @@ typedef struct shmSinglePort{
 }structShmSingleSupply;
 
 typedef struct msgDemand{
-    short type;
+    long type;
     int quantity;
 }structMsgDemand;
 
@@ -44,6 +44,7 @@ typedef struct goods_dump{
     struct goods_states states[SO_MERCI];
 }struct_goods_dump;
 
+
 typedef struct port_states{
     int goods_sended;
     int goods_receved;
@@ -52,6 +53,9 @@ typedef struct port_states{
     int dock_free;
 }struct_port_states;
 
+typedef struct port_dump{
+    struct port_states states[SO_PORTI];
+}struct_port_dump;
 
 typedef struct ship_states{
     int ship_see_goods;
@@ -62,8 +66,4 @@ typedef struct ship_states{
 typedef struct ship_dump{
     struct ship_states states[3];
 }struct_ship_dump;
-
-typedef struct port_dump{
-    struct port_states states[SO_PORTI];
-}struct_port_dump;
 

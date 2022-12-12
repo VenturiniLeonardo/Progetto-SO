@@ -56,6 +56,52 @@ int main(){
         fprintf(stderr,"Error initializing semaphore, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
+/* 
+    Sem for dump
+if((sySem = semget(DUMP_KEY,1,IPC_CREAT|IPC_EXCL|0666)) == -1){
+fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
+exit(EXIT_FAILURE);
+}
+
+Shared memory for dump of goods
+
+if((shm_dump_goods = shmget(GOODS_DUMP_KEY,sizeof(struct goods_dump),IPC_CREAT |IPC_EXCL|0666 )) == -1){
+fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
+exit(EXIT_FAILURE);
+}
+
+struct_goods_dump=(struct goods_dump*) shmat(shm_dump_goods,NULL,0);
+TEST_ERROR;
+
+Shared memory for dump of port
+
+shm_dump_port=shmget(PORT_DUMP_KEY,sizeof(struct port_dump),IPC_CREAT |IPC_EXCL|0666);
+TEST_ERROR;
+struct_port_dump=(struct port_dump*)shmat(shm_dump_port,NULL,0);
+TEST_ERROR;
+
+Shared memory for dump of ship
+
+shm_dump_ship=shmget(SHIP_DUMP_KEY,sizeof(struct ship_dump),IPC_CREAT |IPC_EXCL|0666);
+TEST_ERROR;
+struct_ship_dump=(struct ship_dump*)shmat(shm_dump_ship,NULL,0);
+TEST_ERROR;
+
+alarm set and creation
+
+if((shmPort = shmget(PORT_POS_KEY,0,IPC_CREAT |IPC_EXCL|0666 )) == -1){
+fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
+exit(EXIT_FAILURE);
+}
+
+ports=(struct port *) shmat(shmPort,NULL,SHM_RDONLY);
+if (ports == (void *) -1){
+fprintf(stderr,"Error assing ports to shared memory, %d: %s\n",errno,strerror(errno));
+exit(EXIT_FAILURE);
+}
+
+*/
+
 
     /*PORT AND SHIP*/
 
@@ -66,8 +112,10 @@ int main(){
     sops.sem_op=-1;
     sops.sem_flg=0;
     semop(sySem,&sops,1); 
+
     sops.sem_op=0;
     semop(sySem,&sops,1);
+
     printf("START...\n");
     
     /*elapsed days
@@ -113,7 +161,6 @@ struct coords generateRandCoords(){
 
     struct coords c;
     double div;
-    srand(getpid());
     div = RAND_MAX / SO_LATO;
     c.x = rand() / div;
     div = RAND_MAX / SO_LATO;
