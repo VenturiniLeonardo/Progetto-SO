@@ -27,9 +27,12 @@ struct port* duck_access_load(pid_t);
 void duck_access_unload(pid_t);
 struct coords getCoordFromPid(int);
 struct port* nearPort(pid_t ,struct coords);
+
+int getMaxExpiryDate(struct good[]);
+/*int dumpSem*/
+
 int quantity;
-
-
+struct port_dump* port_d;
 struct port *ports;
 
 int main(){
@@ -56,7 +59,19 @@ int main(){
         exit(EXIT_FAILURE);
     }
 
-    /*Sy Semaphore*/
+
+            
+    /*if((shm_dump_port=shmget(PORT_DUMP_KEY,sizeof(struct port_dump),IPC_CREAT |IPC_EXCL|0666))==-1)
+        TEST_ERROR;
+    port_d=(struct port_dump*)shmat(shm_dump_port,NULL,0);
+        TEST_ERROR;*/
+
+    /*Sem for dump
+    if((dumpSem = semget(DUMP_KEY,3,IPC_CREAT|IPC_EXCL|0666)) == -1){
+        fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+/*Sy Semaphore*/
     if((sySem = semget(SY_KEY,1,0666)) == -1){
         fprintf(stderr,"Error sy semaphore creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
@@ -85,7 +100,7 @@ int main(){
         printf("%d:   Arrivato al porto %d dopo %ld ns\n",getpid(),currentPort->pidPort,tim.tv_nsec);
         nextPort = duck_access_load(currentPort->pidPort);
         printf("%d:  Prossimo porto %d\n",getpid(),nextPort->pidPort);
-        if(nextPort == NULL){
+        if(nextPort->pidPort == 0){
             nextPort = nearPort(currentPort->pidPort,currentPort->coord);
             printf("%d:  Non ho trovato nulla prossimo porto %d\n",getpid(),nextPort->pidPort);
         }
@@ -147,6 +162,14 @@ struct coords generateRandCoords(){
     return c;
 }
 
+
+/*
+Input: void
+Output: int
+Desc: return random int between 1 and SO_BANCHINE
+*/
+
+
 /*
 Input: void
 Output: int
@@ -187,12 +210,27 @@ int undocking(pid_t pid_port){
         if((dockSem = semget(pid_port,1,0666)) == -1)
             TEST_ERROR;
 
-        sops.sem_op= 1;
+        sops.sem_num=0;
+        sops.sem_op=1;
         sops.sem_flg=0;
         semop(dockSem,&sops,1); 
 
 }
 
+/*
+Input: void
+Output: int
+Desc: return random int between 1 and SO_BANCHINE
+*/
+int getMaxExpiryDate(struct good supply[]){
+    int i;
+    int maxDate = 0;
+    for(i = 0;i<SO_MERCI;i++){
+        if(supply[i].date_expiry >= maxDate)
+            maxDate = supply[i].date_expiry;
+    }
+    return maxDate;
+}
 
 
 /*
@@ -222,6 +260,8 @@ struct port* getSupply(pid_t pid_port){
         struct port *sendPort;
         struct timespec tim;
 
+
+
         /*Get shm semaphore*/
         supplyKey=ftok("./port.c",pid_port);
         if((semSupply = semget(supplyKey,1,0666)) == -1){
@@ -243,11 +283,10 @@ struct port* getSupply(pid_t pid_port){
         if(shmPort == (void *) -1)
             TEST_ERROR;
 
-        printf("%d :: Cerco offerta \n",getpid());
+        printf("%d : Cerco offerta \n",getpid());
         /*Search for min date expiry in current port*/
         for(i=0;i<SO_MERCI;i++){
             if((shmPort->typeGoods[i][0] == 1 )&&(shmPort->supply[i].date_expiry < min_exipry && shmPort->supply[i].date_expiry > 0)){
-                printf("%d:   %d t:%d\n",getpid(),pid_port,shmPort->supply[i].type);
                 trovato = 1;
                 min_exipry = shmPort->supply[i].date_expiry;
                 type = i;
@@ -261,7 +300,6 @@ struct port* getSupply(pid_t pid_port){
             sops.sem_op = 1;
             sops.sem_flg=0;
             semop(semSupply,&sops,1); 
-            printf("NULL %d\n",getpid());
             return NULL;
         }
 
@@ -274,17 +312,17 @@ struct port* getSupply(pid_t pid_port){
         do{
             portNear = near_ports(pid_port,SO_SPEED*shmPort->supply[type].date_expiry,&portSize); 
             /*Set for demand in near ports*/
+            printf("%d\n",portSize);
             for(i=0;i<portSize && flagGood == 0;i++){
             
                 if((msgDemand = msgget(portNear[i].pidPort,0666)) == -1){
                     fprintf(stderr,"Error messagge queue demand in ship, %d: %s\n",errno,strerror(errno));
                     exit(EXIT_FAILURE);
                 }
-                printf("Cerco in %d per domanda %d\n",msgDemand,getpid());
+                printf("Ricerca %d per domanda %d\n",i,getpid());
                 
                 /*Find goods*/
                 if((findGood = msgrcv(msgDemand,&demandGood,sizeof(int),(type+1),IPC_NOWAIT)) != -1){
-                    printf("Presa: %d\n",portSize); 
                     /*if(shmPort->supply[type-1].quantity>=demandGood.quantity){
                         if(demandGood.quantity<=SO_CAPACITY){
                             quantity = demandGood.quantity;
@@ -309,7 +347,7 @@ struct port* getSupply(pid_t pid_port){
                             msgsnd(msgDemand,&demandGood,sizeof(int),0);                       
                         }
                     }*/
-                    printf("Carico \n");
+
                     tim.tv_sec=0;
                     tim.tv_nsec= quantity/SO_LOADSPEED;
                     if(nanosleep(&tim,NULL)<0){
@@ -323,19 +361,23 @@ struct port* getSupply(pid_t pid_port){
                 }
 
             }
-
-            /*Find next min exipry date*/
-            for(i=0;i<SO_MERCI && flagGood == 0;i++){
-                if((shmPort->typeGoods[i][0] == 1 || shmPort->typeGoods[i][1] == 1 )&&(shmPort->supply[i].date_expiry < min_exipry) ){
-                    min_exipry= shmPort->supply[i].date_expiry;
-                    type = i;
-                }
-            }
-            /*Set min exipry to prev min exipry*/
-            min_exipry_prev = min_exipry;
-            min_exipry = SO_MAX_VITA+1;
             
-        }while(shmPort->supply[i].date_expiry  == min_exipry && flagGood == 0);
+            if(!flagGood){
+                /*Find next min exipry date*/
+                for(i=0;i<SO_MERCI;i++){
+                    if((shmPort->typeGoods[i][0] == 1)&&(shmPort->supply[i].date_expiry > min_exipry_prev && shmPort->supply[i].date_expiry < min_exipry) ){
+                        min_exipry= shmPort->supply[i].date_expiry;
+                        type = i;
+                    }
+                }
+                /*Set min exipry to prev min exipry*/
+                min_exipry_prev = min_exipry;
+                min_exipry = SO_MAX_VITA+1;
+                
+            }
+
+            
+        }while(getMaxExpiryDate(shmPort->supply)  == min_exipry_prev && flagGood == 0);
         
         
         /*if(shmPort->supply[min_exipry].quantity > SO_MERCI){
@@ -344,12 +386,16 @@ struct port* getSupply(pid_t pid_port){
         sops.sem_num=0;
         sops.sem_op= 1;
         sops.sem_flg=0;
-        semop(semSupply,&sops,1);
+        semop(semSupply,&sops,1); 
 
         if(flagGood){
+            printf("NNULL\n");
             return &portNear[i];
         }else{
-            return NULL;
+            sendPort->coord.x = -1;
+            sendPort->coord.y = -1;
+            sendPort->pidPort = 0;
+            return sendPort;
         }
 
 }
@@ -408,10 +454,15 @@ struct port* duck_access_load(pid_t pid_port){
     struct sembuf sops; 
     int res_Supply;
     struct port *ret_get_supply;
-
+    struct sembuf sops_dump;
 
     docking(pid_port);
-
+    /* 
+    sops_dump.sem_op=-1;
+    semop(dumpSem,&sops,1)
+    port_d->
+    */
+    
     printf("%d:  Effettutato attracco %d\n",getpid(),pid_port);
     ret_get_supply = getSupply(pid_port);    
     
@@ -436,3 +487,12 @@ void duck_access_unload(pid_t pidPort){
     undocking(pidPort);
 
 }
+
+/*int get_index_form_Pid(pid_t pidPort){
+    int i;
+    for(i=0;i<SO_PORTI;i++){
+        if(ports[i].pidPort==pidPort)
+            return i;
+    }
+    return -1;
+} */
