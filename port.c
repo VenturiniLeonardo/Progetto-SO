@@ -26,18 +26,20 @@ void deallocateResources();
 
 struct port_dump* port_d;
 int mqDemand;
-
+int dumpSem;
 /*struct good offers[SO_MERCI];*/
 int quantityDemand;
 int quantitySupply;
 int end = 1;
 struct shmSinglePort* shmPort;
+struct goods_dump * good_d;
 
 
 /*Handler*/
 void signalHandler(int signal){
     switch(signal){
         case SIGALRM:
+            printf("SIGALARM\n");
         break;
         case SIGUSR1:
             reloadExpiryDate();
@@ -65,7 +67,7 @@ int main(){
     int i;
     int j;
     int shm_dump_port;
-    int dumpSem;
+    int shm_dump_goods;
     quantityDemand = 0;
     quantitySupply = 0;
     
@@ -77,17 +79,26 @@ int main(){
     }
 
     /*Dump */
-    /*if((shm_dump_port=shmget(PORT_DUMP_KEY,sizeof(struct port_dump),0666))==-1)
+    if((shm_dump_port=shmget(PORT_DUMP_KEY,sizeof(struct port_dump),0666))==-1)
         TEST_ERROR;
     port_d=(struct port_dump*)shmat(shm_dump_port,NULL,0);
-        TEST_ERROR;*/
+        TEST_ERROR;
 
-    /*Sem for dump
+    /*Dump  for goods*/
+    if((shm_dump_goods = shmget(GOODS_DUMP_KEY,sizeof(struct goods_dump),0666 )) == -1){
+        fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    good_d=(struct goods_dump*) shmat(shm_dump_goods,NULL,0);
+    
+    TEST_ERROR;
+
+    /*Sem for dump*/
     if((dumpSem = semget(DUMP_KEY,1,0666)) == -1){
         fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
-    
+
     /*Sem creation for Supply */
     key_semSupply=ftok("port.c",getpid());
     semSupply=semget(key_semSupply,1,IPC_CREAT|IPC_EXCL|0666);
@@ -150,8 +161,11 @@ int main(){
     
 
     /*WAIT SIGNAL*/
-    sleep(15);
-    
+    do{
+        sigsuspend(&mask);
+    }while(end);
+
+    deallocateResources();
     return 0;
 }
 
@@ -183,7 +197,6 @@ int generatorSupply(){
     key_semSupply=ftok("port.c",getpid());
     if((semSupply=semget(key_semSupply,1,0666))==-1)
         TEST_ERROR;
-    
 
     /*INSERT SUPPLY INTO SHM*/
     sops.sem_num=0;
@@ -211,14 +224,14 @@ int generatorSupply(){
     if(newGood.quantity > SO_FILL-quantitySupply)
         return -1;
     
-    /*   
-    sops_dump.sem_op=-1;
-    semop(dumpSem,&sops,1)
-    port_d->states[get_index_from_Pid(getpid())dock_occuped++;
-    sops_dump.sem_op=1;
-    semop(dumpSem,&sops,1)
-    */ 
 
+
+    sops_dump.sem_op=-1;
+    semop(dumpSem,&sops_dump,1);
+    good_d->states[newGood.type-1].goods_in_port += 1;
+    port_d->states[getpid()].goods_offer+=newGood.quantity; 
+    sops_dump.sem_op=1;
+    semop(dumpSem,&sops_dump,1);
 
     quantitySupply += newGood.quantity;
     srand(getpid());
@@ -250,6 +263,7 @@ void reloadExpiryDate(){
     key_t key_semSupply;
     int semSupply;
     struct sembuf sops;
+    struct sembuf sops_dump;
 
     key_semSupply=ftok("port.c",getpid());
     semSupply=semget(key_semSupply,1,0666);
@@ -265,8 +279,20 @@ void reloadExpiryDate(){
     TEST_ERROR;
 
     for(i=0;i<SO_MERCI;i++){
-        if(shmPort->typeGoods[i][0]!=0)
-            shmPort->supply[i].date_expiry--;
+        if(shmPort->typeGoods[i][0] == 1){
+            if(shmPort->supply[i].date_expiry > 0)
+                shmPort->supply[i].date_expiry--;
+            else{
+                shmPort->supply[i].date_expiry = -1;
+                shmPort->typeGoods[i][0] == 0;
+                sops_dump.sem_op=-1;
+                semop(dumpSem,&sops_dump,1);
+                good_d->states[i].goods_in_port -= 1;
+                good_d->states[i].goods_expired_port += 1;
+                sops_dump.sem_op=1;
+                semop(dumpSem,&sops_dump,1);
+            }
+        }
     }
 
     sops.sem_num=0;
@@ -288,6 +314,7 @@ int generatorDemand(){
     int i;
     int sndDemand;
     struct sembuf sops;
+    struct sembuf sops_dump;
     int semDemand;
     key_t key_semDemand;
 
@@ -326,6 +353,13 @@ int generatorDemand(){
 
     printf("Generata domanda porto %d t: %ld q: %d\n",getpid(),msg.type,msg.quantity);
 
+
+    sops_dump.sem_op=-1;
+    semop(dumpSem,&sops_dump,1);
+    port_d->states[getpid()].goods_demand += msg.quantity; 
+    sops_dump.sem_op=1;
+    semop(dumpSem,&sops_dump,1);
+
     sops.sem_num=0;
     sops.sem_op=1;
     sops.sem_flg=0;
@@ -343,26 +377,41 @@ Input: void
 Output: void
 Desc: deallocate all resources
 */
+
 void deallocateResources(){
     int semDock;
     int queMes;
     int shm_offer;
+    int semSupply;
 
-    semDock = semget(getpid(),1,0666);
-    semctl(semDock,0,IPC_RMID);
-    shm_offer=shmget(getpid(),sizeof(struct shmSinglePort), IPC_CREAT | IPC_EXCL | 0666);  
-    TEST_ERROR;
-    shmctl(shm_offer,IPC_RMID,0);
-    queMes = msgget(getpid(),0666);
-    msgctl(queMes,IPC_RMID,NULL);
-    
-}
-
-/*int get_index_from_Pid(pid_t pidPort){
-    int i;
-    for(i=0;i<SO_PORTI;i++){
-        if(ports[i].pidPort==pidPort)
-            return i;
+    /*Sem Docks*/
+    if((semDock = semget(getpid(),1,0666)) == -1){
+        TEST_ERROR;
     }
-    return -1;
-} */
+    if((semctl(semDock,0,IPC_RMID)) == -1){
+        TEST_ERROR;
+    }
+
+    /*Sem Offer*/
+    if((semSupply=semget(ftok("port.c",getpid()),1,0666)) == -1){
+        TEST_ERROR;
+    }
+    semctl(semSupply,0,IPC_RMID);
+    TEST_ERROR;
+
+    /*Shm Offer*/
+    if((shm_offer=shmget(getpid(),sizeof(struct shmSinglePort),0666) ) == -1){
+        TEST_ERROR;
+    }
+    shmctl(shm_offer,IPC_RMID,0);
+    TEST_ERROR;
+
+    /*Msg Queue*/
+    if((queMes = msgget(getpid(),0666)) == -1){
+        TEST_ERROR;
+    }
+
+    msgctl(queMes,IPC_RMID,NULL);
+    TEST_ERROR;
+    
+} 

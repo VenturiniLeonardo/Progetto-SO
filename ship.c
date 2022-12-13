@@ -27,13 +27,18 @@ struct port* duck_access_load(pid_t);
 void duck_access_unload(pid_t);
 struct coords getCoordFromPid(int);
 struct port* nearPort(pid_t,pid_t ,struct coords);
+int get_index_from_Pid(pid_t);
 
 int getMaxExpiryDate(struct good[]);
-/*int dumpSem*/
 
+int dumpSem;
 int quantity;
+int on_type;
 struct port_dump* port_d;
 struct port *ports;
+struct ship_dump *ship_d;
+struct goods_dump* good_d;
+
 
 int main(){
     struct timespec tim;
@@ -45,7 +50,10 @@ int main(){
     struct port* prevPort;
     struct coords ship_coords;
     int i = 0;
-
+    int shm_dump_port;
+    int shm_dump_ship;
+    int shm_dump_goods;
+   
     ship_coords=generateRandCoords();
 
 
@@ -60,21 +68,33 @@ int main(){
         exit(EXIT_FAILURE);
     }
 
-
-            
-    /*if((shm_dump_port=shmget(PORT_DUMP_KEY,sizeof(struct port_dump),0666))==-1)
+    
+    /*shm_mem for dump_port */
+    if((shm_dump_port=shmget(PORT_DUMP_KEY,sizeof(struct port_dump),0666))==-1)
         TEST_ERROR;
     port_d=(struct port_dump*)shmat(shm_dump_port,NULL,0);
-        TEST_ERROR;*/
+    TEST_ERROR;
 
-    /*Sem for dump
+
+    /*shm_mem for dump_ship*/
+    if((shm_dump_ship=shmget(SHIP_DUMP_KEY,sizeof(struct ship_dump),IPC_CREAT |IPC_EXCL|0666))==-1)
+        TEST_ERROR;
+    ship_d=(struct ship_dump*)shmat(shm_dump_ship,NULL,0);
+    TEST_ERROR;
+
+    /*Dump  for goods*/
+    if((shm_dump_goods = shmget(GOODS_DUMP_KEY,sizeof(struct goods_dump),IPC_CREAT |IPC_EXCL|0666 )) == -1){
+        fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FA        double time_second;goods_dump*) shmat(shm_dump_goods,NULL,0);
+
+    /*Sem for dump*/
     if((dumpSem = semget(DUMP_KEY,1,0666)) == -1){
         fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
     
 
-/*Sy Semaphore*/
+    /*Sy Semaphore*/
     if((sySem = semget(SY_KEY,1,0666)) == -1){
         fprintf(stderr,"Error sy semaphore creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
@@ -102,6 +122,7 @@ int main(){
     do{
         printf("%d:   Arrivato al porto %d dopo %ld ns\n",getpid(),currentPort->pidPort,tim.tv_nsec);
         nextPort = duck_access_load(currentPort->pidPort);
+        
         if(nextPort->pidPort == 0){
             nextPort = nearPort(prevPort->pidPort,currentPort->pidPort,currentPort->coord);
             printf("%d:  Non ho trovato nulla prossimo porto %d\n",getpid(),nextPort->pidPort);
@@ -119,9 +140,13 @@ int main(){
             printf("%d:  Partenza \n",getpid());
             tim.tv_sec=0;
             tim.tv_nsec=(distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED);
-            if(nanosleep(&tim,NULL)<0){
-                TEST_ERROR;
+
+            if(nanosleep(&tim,NULL)<0){                   
+                    TEST_ERROR;
             }
+
+            /*int(tim.tv_nsec*10^9)*/
+
             prevPort = currentPort;
             currentPort = nextPort;
             duck_access_unload(currentPort->pidPort);
@@ -272,7 +297,8 @@ struct port* getSupply(pid_t pid_port){
         int flagGood = 0;
         struct port* sendPort;
         struct timespec tim;
-
+        struct sembuf sops_dump;
+       
 
 
         /*Get shm semaphore*/
@@ -313,7 +339,11 @@ struct port* getSupply(pid_t pid_port){
             sops.sem_op = 1;
             sops.sem_flg=0;
             semop(semSupply,&sops,1); 
-            return NULL;
+            sendPort = (struct port*)malloc(sizeof(struct port));
+            sendPorintt->coord.x = -1;
+            sendPort->coord.y = -1;
+            sendPort->pidPort = 0;
+            return sendPort;
         }
 
        /* printf("%d %d %d\n",shmPort->supply[i].type,shmPort->supply[i].quantity,shmPort->supply[i].date_expiry);*/
@@ -325,7 +355,7 @@ struct port* getSupply(pid_t pid_port){
         do{
             portNear = near_ports(pid_port,SO_SPEED*shmPort->supply[type].date_expiry,&portSize); 
             /*Set for demand in near ports*/
-            for(i=0;i<portSize && flagGood == 0;i++){
+            for(i=0int;i<portSize && flagGood == 0;i++){
             
                 if((msgDemand = msgget(portNear[i].pidPort,0666)) == -1){
                     fprintf(stderr,"Error messagge queue demand in ship, %d: %s\n",errno,strerror(errno));
@@ -360,12 +390,27 @@ struct port* getSupply(pid_t pid_port){
                             msgsnd(msgDemand,&demandGood,sizeof(int),0);                       
                         }
                     }
+                    on_type=type;
+
+                    sops_dump.sem_op=-1;
+                    semop(dumpSem,&sops_dump,1);
+                    /*Dump goods*/
+                    good_d->states[type].goods_in_port -= 1;
+                    good_d->states[type].goods_on_ship += 1;
+                    
+                    /*Dump ports*/ 
+                    port_d->states[pid_port].goods_sended+=quantity;  
+                    port_d->states[pid_port].goods_offer-=quantity; 
+                    sops_dump.sem_op=1;
+                    semop(dumpSem,&sops_dump,1);
 
                     tim.tv_sec=0;
                     tim.tv_nsec= quantity/SO_LOADSPEED;
+                    /*Time load*/
                     if(nanosleep(&tim,NULL)<0){
                         TEST_ERROR;
                     }
+                   
                     printf("%d:  Merce caricata %d presso il porto %d\n",getpid(),quantity,pid_port);
 
                     flagGood = 1;
@@ -408,7 +453,6 @@ struct port* getSupply(pid_t pid_port){
         }
 
 }
-
 /*
 Input: int
 Output: struct coords
@@ -417,6 +461,7 @@ Desc: returns struct coords from port pid
 struct coords getCoordFromPid(int pid){
     int i;
     struct coords c;
+    
     for(i = 0;i < SO_PORTI;i ++){
         if(ports[i].pidPort == pid)
             return ports[i].coord;
@@ -450,9 +495,7 @@ struct port* near_ports(pid_t currPort,double max_distance,int *length){
         TEST_ERROR;
     port_return=malloc(sizeof(struct port));
     currCoord = (getCoordFromPid(currPort));
-    for(i=0;i<SO_PORTI;i++){                      
-        if((ports[i].pidPort != currPort) && (distance(currCoord.x,currCoord.y,ports[i].coord.x,ports[i].coord.y)<max_distance)){
-            port_return[j].coord.x=ports[i].coord.x;
+    for(i=0;i<SO_PORTI;i++){                      distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED
             port_return[j].coord.y=ports[i].coord.y;
             port_return[j].pidPort=ports[i].pidPort;
             port_return=realloc(port_return,sizeof(struct port));
@@ -462,7 +505,7 @@ struct port* near_ports(pid_t currPort,double max_distance,int *length){
     *length = j;
 
     return port_return;  
-}
+}        double time_second;
     
 
 /*
@@ -479,25 +522,36 @@ struct port* duck_access_load(pid_t pid_port){
     struct sembuf sops_dump;
 
     docking(pid_port);
-    /* 
+
     sops_dump.sem_op=-1;
-    semop(dumpSem,&sops,1)
-    port_d->states[get_index_from_Pid(pid_port)dcock_occuped++;
+    semop(dumpSem,&sops,1);
+    /*Dump ships*/
+    ship_d->ship_in_port += 1;
+    ship_d->ship_sea_no_goods -= 1;
+    /*Dump ports*/
+    port_d->states[get_index_from_Pid(pid_port)].dock_occuped++;
     sops_dump.sem_op=1;
-    semop(dumpSem,&sops,1)
-    */
+    semop(dumpSem,&sops,1);
+
     
     printf("%d:  Effettutato attracco %d\n",getpid(),pid_port);
     ret_get_supply = getSupply(pid_port);    
     
     undocking(pid_port);
-    /* 
-    sops_dump.sem_op=-1;
-    semop(dumpSem,&sops,1)
-    port_d->states[get_index_from_Pid(pid_port)dock_occuped--;
+    
+     good_d->states[on_tipe]. sops_dump.sem_op=-1;  
+    semop(dumpSem,&sops_dump,1);
+    /*Dump ships*/
+    ship_d->ship_in_port -= 1;
+    if(ret_get_supply->pidPort == 0)
+        ship_d->ship_sea_no_goods += 1;
+    else
+        ship_d->ship_sea_goods += 1;
+    /*Dump ports*/
+    port_d->states[get_index_from_Pid(pid_port)].dock_occuped--;
     sops_dump.sem_op=1;
-    semop(dumpSem,&sops,1)
-    */
+    semop(dumpSem,&sops_dump,1);
+    
     
     printf("%d:  Lascio il molo %d\n",getpid(),pid_port);
     return ret_get_supply;
@@ -513,35 +567,45 @@ void duck_access_unload(pid_t pidPort){
     struct sembuf sops_dump;
     /*Semaphore Dock*/
     docking(pidPort);
-    /* 
-    sops_dump.sem_op=-1;
-    semop(dumpSem,&sops,1)
-    port_d->states[get_index_from_Pid(pid_port)dock_occuped++;
-    sops_dump.sem_op=1;
-    semop(dumpSem,&sops,1)
-    */
+    
     printf("%d:  Scarico\n",getpid());
     tim.tv_sec=0;
     tim.tv_nsec= quantity/SO_LOADSPEED;
     if(nanosleep(&tim,NULL)<0){
         TEST_ERROR;
     }
+    
+    sops_dump.sem_op=-1;
+    semop(dumpSem,&sops_dump,1);
+    /*Dump goods*/
+    good_d->states[on_type].goods_delivered += 1;
+    good_d->states[on_type].goods_on_ship -= 1;
+    /*Dump ports*/
+    port_d->states[get_index_from_Pid(pidPort)].goods_receved-=quantity;
+    port_d->states[get_index_from_Pid(pidPort)].goods_demand -=quantity;
+    sops_dump.sem_op=1;
+    semop(dumpSem,&sops_dump,1);
 
     undocking(pidPort);
-    /* 
+    
     sops_dump.sem_op=-1;
-    semop(dumpSem,&sops,1)
-    port_d->states[get_index_from_Pid(pid_port)dock_occuped--;
+    semop(dumpSem,&sops_dump,1);
+     
+    /*Dump ships*/
+    ship_d->ship_in_port -= 1;
+    ship_d->ship_sea_no_goods += 1;
+    /*Dump ports*/
+    port_d->states[get_index_from_Pid(pidPort)].dock_occuped--;
     sops_dump.sem_op=1;
-    semop(dumpSem,&sops,1)
-    */
+    semop(dumpSem,&sops_dump,1);
+    
 }
 
-/*int get_index_from_Pid(pid_t pidPort){
+int get_index_from_Pid(pid_t pidPort){
     int i;
     for(i=0;i<SO_PORTI;i++){
         if(ports[i].pidPort==pidPort)
             return i;
     }
     return -1;
-} */
+} 

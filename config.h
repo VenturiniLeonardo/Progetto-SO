@@ -5,7 +5,7 @@
 #define DAY_TIME 1 /*day duration in seconds*/
 
 /*PORTS*/
-#define SO_PORTI 4 /*number of ports (int,>= 4)*/
+#define SO_PORTI 5 /*number of ports (int,>= 4)*/
 #define SO_BANCHINE 5 /*maximum number of docks (int)*/
 #define SO_FILL 100 /*maximum goods capacity of the port*/
 #define SO_LOADSPEED 3/*loading/unloading speed of ports (ton/days)*/
@@ -68,6 +68,5 @@ void checkParams(){
     getpid(),\
     errno,\
     strerror(errno));}
-
 
 

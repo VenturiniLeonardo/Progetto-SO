@@ -49,6 +49,7 @@ typedef struct port_states{
     int goods_sended;
     int goods_receved;
     int goods_offer;
+    int goods_demand;
     int dock_occuped;
     int dock_total;
 }struct_port_states;
@@ -57,13 +58,9 @@ typedef struct port_dump{
     struct port_states states[SO_PORTI];
 }struct_port_dump;
 
-typedef struct ship_states{
-    int ship_see_goods;
-    int ship_in_port;
-    int ship_see_no_goods;
-}struct_ship_states;
-
 typedef struct ship_dump{
-    struct ship_states states[3];
+    int ship_sea_goods;
+    int ship_in_port;
+    int ship_sea_no_goods;
 }struct_ship_dump;
 
