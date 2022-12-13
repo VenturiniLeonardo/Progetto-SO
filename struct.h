@@ -50,7 +50,7 @@ typedef struct port_states{
     int goods_receved;
     int goods_offer;
     int dock_occuped;
-    int dock_free;
+    int dock_total;
 }struct_port_states;
 
 typedef struct port_dump{

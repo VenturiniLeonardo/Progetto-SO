@@ -141,8 +141,8 @@ exit(EXIT_FAILURE);
 /*Functions definitions*/
 
 /* 
-Input: int max, int min
-Output: int r random
+Input: int, int
+Output: int
 Desc: return random int in range(max-min)
 */
 int genRandInt(int max, int min){
@@ -154,8 +154,8 @@ int genRandInt(int max, int min){
 
 /* 
 Input: void
-Output: struct coords c
-Desc: struct coords c with random x and y coords
+Output: struct coords
+Desc: return struct coords of rand coords
 */
 struct coords generateRandCoords(){
 
@@ -170,9 +170,9 @@ struct coords generateRandCoords(){
 }
 
 /*
-Input: port's coord array, new random c coords for port
-Output: 1 if is already present, 0 otherwise
-Desc: check if an c element is present in a array
+Input: struct port[], struct coords,int
+Output: int
+Desc: returns 0 if coordinate is not present 1 otherwise
 */
 int arrContains(struct port arr[],struct coords c,int arrLen){
     int contains=0;
@@ -193,8 +193,8 @@ int arrContains(struct port arr[],struct coords c,int arrLen){
 
 /*
 Input: void
-Output: returns 0 if successful -1 otherwise
-Desc: Generate SO_PORTI process ports pass it the generated coordinates
+Output: int
+Desc: returns 0 if it has generated all ports correctly, -1 otherwise
 */
 int portGenerator(){
 
@@ -257,8 +257,8 @@ int portGenerator(){
 
 /*
 Input: void
-Output: returns 0 if successful -1 otherwise
-Desc: Generate SO_NAVI process ships
+Output: int
+Desc: returns 0 if it has generated all ships correctly, 1 otherwise
 */
 int shipGenerator(){
     int i;
@@ -283,8 +283,8 @@ int shipGenerator(){
 
 /*
 Input: void
-Output: returns 0 if successful -1 otherwise
-Desc: deallocate all resources 
+Output: int
+Desc: returns 0 if deallocate all resources, -1 otherwise 
 */
 int deallocateResources(){
 

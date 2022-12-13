@@ -24,6 +24,7 @@ int generatorSupply();
 void reloadExpiryDate();
 void deallocateResources();
 
+struct port_dump* port_d;
 int mqDemand;
 
 /*struct good offers[SO_MERCI];*/
@@ -63,7 +64,8 @@ int main(){
     int shm_offer;
     int i;
     int j;
-
+    int shm_dump_port;
+    int dumpSem;
     quantityDemand = 0;
     quantitySupply = 0;
     
@@ -74,6 +76,18 @@ int main(){
         TEST_ERROR;
     }
 
+    /*Dump */
+    /*if((shm_dump_port=shmget(PORT_DUMP_KEY,sizeof(struct port_dump),0666))==-1)
+        TEST_ERROR;
+    port_d=(struct port_dump*)shmat(shm_dump_port,NULL,0);
+        TEST_ERROR;*/
+
+    /*Sem for dump
+    if((dumpSem = semget(DUMP_KEY,1,0666)) == -1){
+        fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    
     /*Sem creation for Supply */
     key_semSupply=ftok("port.c",getpid());
     semSupply=semget(key_semSupply,1,IPC_CREAT|IPC_EXCL|0666);
@@ -155,8 +169,8 @@ int generatorDock(){
 
 /*
 Input: void
-Output: void
-Desc: rgenerate every day a supply
+Output: int
+Desc: returns 0 if it generated goods, -1 if it is not possible and 1 otherwise
 */
 int generatorSupply(){
     int shmSupply;
@@ -165,7 +179,7 @@ int generatorSupply(){
     int i = 0;
     key_t key_semSupply;
     struct sembuf sops;
-
+    struct sembuf sops_dump;
     key_semSupply=ftok("port.c",getpid());
     if((semSupply=semget(key_semSupply,1,0666))==-1)
         TEST_ERROR;
@@ -197,6 +211,15 @@ int generatorSupply(){
     if(newGood.quantity > SO_FILL-quantitySupply)
         return -1;
     
+    /*   
+    sops_dump.sem_op=-1;
+    semop(dumpSem,&sops,1)
+    port_d->states[get_index_from_Pid(getpid())dock_occuped++;
+    sops_dump.sem_op=1;
+    semop(dumpSem,&sops,1)
+    */ 
+
+
     quantitySupply += newGood.quantity;
     srand(getpid());
     newGood.date_expiry = 3;/*(rand()%SO_MAX_VITA-SO_MIN_VITA)+SO_MIN_VITA;*/
@@ -257,8 +280,8 @@ void reloadExpiryDate(){
 
 /*
 Input: void
-Output: void
-Desc: reload expiry date to every goods
+Output: int
+Desc: returns 0 if it generated demand, -1 if it is not possible and 1 otherwise
 */
 int generatorDemand(){
     struct msgDemand msg;
@@ -334,3 +357,12 @@ void deallocateResources(){
     msgctl(queMes,IPC_RMID,NULL);
     
 }
+
+/*int get_index_from_Pid(pid_t pidPort){
+    int i;
+    for(i=0;i<SO_PORTI;i++){
+        if(ports[i].pidPort==pidPort)
+            return i;
+    }
+    return -1;
+} */
