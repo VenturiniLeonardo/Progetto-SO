@@ -1,29 +1,29 @@
 /*Configuration file with all parameters*/
 
 /*GENERALS*/
-#define SO_DAYS 10 /*number of simulation days*/
+#define SO_DAYS 5 /*number of simulation days*/
 #define DAY_TIME 1 /*day duration in seconds*/
 
 /*PORTS*/
-#define SO_PORTI 5 /*number of ports (int,>= 4)*/
-#define SO_BANCHINE 5 /*maximum number of docks (int)*/
-#define SO_FILL 100 /*maximum goods capacity of the port*/
-#define SO_LOADSPEED 3/*loading/unloading speed of ports (ton/days)*/
+#define SO_PORTI 10 /*number of ports (int,>= 4)*/
+#define SO_BANCHINE 3 /*maximum number of docks (int)*/
+#define SO_FILL 10000 /*maximum goods capacity of the port*/
+#define SO_LOADSPEED 5/*loading/unloading speed of ports (ton/days)*/
 #define SO_DISTANZA 0.0001 /*minimum distance between two ports*/
 
 /*SHIPS*/
-#define SO_NAVI 2 /*number of ships (int,>=1)*/
+#define SO_NAVI 5 /*number of ships (int,>=1)*/
 #define SO_SPEED 10 /*speed of ships (double or int)*/
-#define SO_CAPACITY 15/*capacity of ships (ton)*/
+#define SO_CAPACITY 100/*capacity of ships (ton)*/
 
 /*GOODS*/
-#define SO_MERCI 2 /*type of goods (int)*/
+#define SO_MERCI 5 /*type of goods (int)*/
 #define SO_SIZE 100 /*weight of goods (ton)*/
-#define SO_MIN_VITA 2 /*minimum expiry date (days)*/
-#define SO_MAX_VITA 10 /*maximum expiry date (days)*/
+#define SO_MIN_VITA 5 /*minimum expiry date (days)*/
+#define SO_MAX_VITA 20 /*maximum expiry date (days)*/
 
 /*MAP*/
-#define SO_LATO 15 /*side of the map (double)*/
+#define SO_LATO 20 /*side of the map (double)*/
 
 /*WEATHER EVENTS*/
 #define SO_STORM_DURATION /*duration of storm (hours)*/

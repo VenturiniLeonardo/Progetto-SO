@@ -24,6 +24,8 @@ int arrContains(struct port [],struct coords ,int );
 int deallocateResources();
 int genRandInt(int,int);
 int printDump(int,struct goods_dump *,struct port_dump *,struct ship_dump *);
+void killAllPorts();
+void updateDateExpiry();
 
 struct port *ports; 
 
@@ -65,6 +67,11 @@ int main(){
         exit(EXIT_FAILURE);
     }
 
+    if(semctl(dSem,0,SETVAL,1)<0){
+        fprintf(stderr,"Error initializing semaphore, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    
     /*Shared memory for dump of goods*/
     if((shm_dump_goods = shmget(GOODS_DUMP_KEY,sizeof(struct goods_dump),IPC_CREAT |IPC_EXCL|0666 )) == -1){
         fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
@@ -96,7 +103,7 @@ int main(){
 
     /*Shared memory for dump of ship*/
 
-     if((shm_dump_ship=shmget(SHIP_DUMP_KEY,sizeof(struct ship_dump),IPC_CREAT |IPC_EXCL|0666)) == -1){
+    if((shm_dump_ship=shmget(SHIP_DUMP_KEY,sizeof(struct ship_dump),IPC_CREAT |IPC_EXCL|0666)) == -1){
         fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
@@ -106,7 +113,7 @@ int main(){
 
     struct_ship_dump->ship_sea_goods = 0;
     struct_ship_dump->ship_in_port = 0;
-    struct_ship_dump->ship_sea_no_goods = 0;
+    struct_ship_dump->ship_sea_no_goods = SO_NAVI;
 
     /*PORT AND SHIP*/
 
@@ -127,24 +134,25 @@ int main(){
     elapsedDays=0; 
     srand(time(NULL)); 
     while(elapsedDays<SO_DAYS){
-        nRandPort=rand()%SO_PORTI;  
-        /*kill(ports[nRandPort].pidPort,SIGALRM);  
+        /*nRandPort=rand()%SO_PORTI; 
+        kill(ports[nRandPort].pidPort,SIGALRM);  
         for(i=0;i<nRandPort;i++){ 
             RandPort=rand()%SO_PORTI;
             kill(ports[RandPort].pidPort,SIGALRM);
             
         }*/
-        if(printDump(dSem,struct_goods_dump,struct_port_dump,struct_ship_dump))
-            killAllPorts();
+        printf("Day %d\n",elapsedDays+1);
+        /*updateDateExpiry();*/
+        if(printDump(dSem,struct_goods_dump,struct_port_dump,struct_ship_dump)){
             elapsedDays = SO_DAYS;
-        else{
+        }else{
             elapsedDays++;
-            sleep(1);
         }
+        sleep(1);
 
     }
 
-    /*call dump*/
+    killAllPorts();
     deallocateResources();
 }
 
@@ -214,6 +222,7 @@ int portGenerator(){
     char x[50];
     char y[50];
     pid_t sonPid;
+    char index_port[SO_PORTI];
 
     if((shmPort = shmget(PORT_POS_KEY,sizeof(struct port)*SO_PORTI,IPC_CREAT|IPC_EXCL|0666 )) == -1){
         fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
@@ -245,12 +254,14 @@ int portGenerator(){
     for(i = 0;i < SO_PORTI;i++){
         sprintf(x,"%f", ports[i].coord.x);
         sprintf(y,"%f", ports[i].coord.y);
+
+        sprintf(index_port, "%d", i);
         switch (sonPid = fork()){
             case -1:
                 fprintf(stderr,"Error in fork, %d: %s",errno,strerror(errno));
                 return -1;
             case 0:
-                if(execlp("./port","./port",NULL) == -1){
+                if(execlp("./port","./port",index_port,NULL) == -1){
                     fprintf(stderr,"Error in execlp port numer %d, %d: %s",i,errno,strerror(errno));
                     return -1;
                 }
@@ -317,14 +328,14 @@ int printDump(int dSem,struct goods_dump* good_d,struct port_dump* port_d,struct
 
     printf("\nPORTI\n");
     for(i = 0; i< SO_PORTI; i++){
-        printf("Porto %d",i+1);
+        printf("Porto %d\n",i+1);
         printf("- Merce inviata %d\n",port_d->states[i].goods_sended);
         printf("- Merce ricevuta %d\n",port_d->states[i].goods_receved);
         printf("- Merce offerta %d\n",port_d->states[i].goods_offer);
         allOffer = allOffer && port_d->states[i].goods_offer == 0;
         allDemand = allDemand && port_d->states[i].goods_demand == 0;
-        printf("- Merce banchine occupate %d\n",port_d->states[i].dock_occuped);
-        printf("- Merce banchine totali %d\n",port_d->states[i].dock_total);
+        printf("- Banchine occupate %d\n",port_d->states[i].dock_occuped);
+        printf("- Banchine totali %d\n",port_d->states[i].dock_total);
     }
 
     printf("\nNAVI: \n");
@@ -335,7 +346,8 @@ int printDump(int dSem,struct goods_dump* good_d,struct port_dump* port_d,struct
     sops_dump.sem_op=1;
     semop(dSem,&sops_dump,1);
 
-    return allOffer == 1 || allDemand == 1;
+    /*return allOffer == 1 || allDemand == 1;*/
+    return 0;
 }
 
 /*
@@ -347,6 +359,13 @@ void killAllPorts(){
     int i;
     for(i = 0; i< SO_PORTI;i++){
         kill(ports[i].pidPort,SIGTERM);
+    }
+}
+
+void updateDateExpiry(){
+        int i;
+    for(i = 0; i< SO_PORTI;i++){
+        kill(ports[i].pidPort,SIGUSR1);
     }
 }
 
@@ -362,6 +381,7 @@ int deallocateResources(){
     int dSem;
     int shm_dump_goods;
     int shm_dump_port;
+    int shm_dump_ship;
     struct port_dump * struct_port_dump;
     struct ship_dump *struct_ship_dump;
     struct goods_dump *struct_goods_dump;
@@ -381,16 +401,15 @@ int deallocateResources(){
     if((shmPort = shmget(PORT_POS_KEY,0,0666 )) == -1){
         TEST_ERROR;
     }
-
-    shmdt(ports);
-    TEST_ERROR;
+    if(shmdt(ports) == -1)
+        TEST_ERROR;
     
     if((shmPort = shmctl(shmPort,IPC_RMID,NULL)) == -1){
         TEST_ERROR;
     }
 
     /*Sem for dump*/
-    if((dSem = semget(DUMP_KEY,1,IPC_CREAT|IPC_EXCL|0666)) == -1){
+    if((dSem = semget(DUMP_KEY,1,0666)) == -1){
         TEST_ERROR;
     }
 
@@ -399,13 +418,16 @@ int deallocateResources(){
     }
 
     /*Shared memory for dump of goods*/
-    if((shm_dump_goods = shmget(GOODS_DUMP_KEY,sizeof(struct goods_dump),IPC_CREAT |IPC_EXCL|0666 )) == -1){
+    if((shm_dump_goods = shmget(GOODS_DUMP_KEY,sizeof(struct goods_dump),0666 )) == -1){
         TEST_ERROR;
     }
     
     struct_goods_dump=(struct goods_dump*) shmat(shm_dump_goods,NULL,0);
-    shmdt(struct_goods_dump);
-    TEST_ERROR;
+    if(struct_goods_dump == (void *) -1)
+        TEST_ERROR;
+
+    if(shmdt(struct_goods_dump)==-1)
+        TEST_ERROR;
     
     if((shm_dump_goods = shmctl(shm_dump_goods,IPC_RMID,NULL)) == -1){
         TEST_ERROR;
@@ -413,26 +435,32 @@ int deallocateResources(){
 
     /*Shared memory for dump of port*/
 
-    if((shm_dump_port=shmget(PORT_DUMP_KEY,sizeof(struct port_dump),IPC_CREAT |IPC_EXCL|0666)) == -1){
+    if((shm_dump_port=shmget(PORT_DUMP_KEY,sizeof(struct port_dump),0666)) == -1){
         TEST_ERROR;
     }
     struct_port_dump=(struct port_dump*)shmat(shm_dump_port,NULL,0);
-    shmdt(struct_port_dump);
+    if(struct_port_dump == (void *) -1)
+        TEST_ERROR;
+    if(shmdt(struct_port_dump) == -1)
+        TEST_ERROR;
 
     if((shm_dump_port = shmctl(shm_dump_port,IPC_RMID,NULL)) == -1){
         TEST_ERROR;
     }
     /*Shared memory for dump of ship*/
 
-     if((shm_dump_ship=shmget(SHIP_DUMP_KEY,sizeof(struct ship_dump),IPC_CREAT |IPC_EXCL|0666)) == -1){
+    if((shm_dump_ship=shmget(SHIP_DUMP_KEY,sizeof(struct ship_dump),0666)) == -1){
         TEST_ERROR;
     }
+
     struct_ship_dump=(struct ship_dump*)shmat(shm_dump_ship,NULL,0);
-    TEST_ERROR;
+    if(struct_ship_dump == (void *) -1)
+        TEST_ERROR;
 
-    shmdt(struct_ship_dump);
+    if(shmdt(struct_ship_dump) == -1)
+        TEST_ERROR;
 
-    if((struct_ship_dump = shmctl(struct_ship_dump,IPC_RMID,NULL)) == -1){
+    if((shm_dump_ship = shmctl(shm_dump_ship,IPC_RMID,NULL)) == -1){
         TEST_ERROR;
     }
     

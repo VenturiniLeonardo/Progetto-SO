@@ -16,7 +16,6 @@ typedef struct port{
 }structPort;
 
 typedef struct good{
-    int id;
     int type;
     int quantity;
     int date_expiry;

@@ -31,6 +31,7 @@ clean:
 	rm port
 	rm ship
 	rm master
+	ipcrm -a
 
 run:
 	./master
