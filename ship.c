@@ -52,8 +52,8 @@ int main(){
     int i = 0;
     int shm_dump_port;
     int shm_dump_ship;
-    int shm_dump_goods;
-   
+    int shm_dump_goods; 
+    double distanza;
     ship_coords=generateRandCoords();
 
 
@@ -116,9 +116,9 @@ int main(){
     /*At start Ship goes to nearest port*/
     currentPort = prevPort = nearPort(0,0,ship_coords);
     /*printf("Prossimo porto: %d %f %f\n",currentPort->pidPort, currentPort->coord.x,currentPort->coord.y);*/
-
-    tim.tv_sec=0;
-    tim.tv_nsec=(distance(currentPort->coord.x,currentPort->coord.y,ship_coords.x,ship_coords.y)/SO_SPEED)*100000000;
+    distanza=distance(currentPort->coord.x,currentPort->coord.y,ship_coords.x,ship_coords.y)/SO_SPEED;
+    tim.tv_sec=(int)distanza;
+    tim.tv_nsec=(distanza-(int)distanza)*10000000;
     if(nanosleep(&tim,NULL)<0){
         TEST_ERROR;
     }
@@ -134,8 +134,9 @@ int main(){
             /*printf("%d:  Non ho trovato nulla prossimo porto %d\n",getpid(),nextPort->pidPort);
             printf("%d:  Prossimo porto %d\n",getpid(),nextPort->pidPort);
             printf("%d:  Partenza \n",getpid());*/
-            tim.tv_sec=0;
-            tim.tv_nsec=(distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED)*100000000;
+            distanza=distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED;
+            tim.tv_sec=(int)distanza;
+            tim.tv_nsec=(distanza-(int)distanza)*1000000000;
             prevPort = currentPort;
             currentPort = nextPort;
             if(nanosleep(&tim,NULL)<0){
@@ -144,8 +145,9 @@ int main(){
         }else{
             /*printf("%d:  Prossimo porto %d\n",getpid(),nextPort->pidPort);
             printf("%d:  Partenza \n",getpid());*/
-            tim.tv_sec=0;
-            tim.tv_nsec=(distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED)*100000000;
+            distanza=distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED;
+            tim.tv_sec=(int)distanza;
+            tim.tv_nsec=(distanza-(int)distanza)*1000000000;
             
             if(nanosleep(&tim,NULL)<0){                   
                 TEST_ERROR;
@@ -304,7 +306,7 @@ struct port* getSupply(pid_t pid_port){
         struct port* sendPort;
         struct timespec tim;
         struct sembuf sops_dump;
-       
+        double time_nanosleep;
 
 
         /*Get shm semaphore*/
@@ -401,7 +403,7 @@ struct port* getSupply(pid_t pid_port){
 
 
                     on_type=type+1;
-
+                    
                     sops_dump.sem_op=-1;
                     semop(dumpSem,&sops_dump,1);
                     /*Dump goods*/
@@ -413,8 +415,10 @@ struct port* getSupply(pid_t pid_port){
                     port_d->states[get_index_from_pid(pid_port)].goods_offer-=quantity; 
                     sops_dump.sem_op=1;
                     semop(dumpSem,&sops_dump,1);
-                    tim.tv_sec=0;
-                    tim.tv_nsec= (quantity/SO_LOADSPEED)*100000000;
+
+                    time_nanosleep=quantity/SO_LOADSPEED;
+                    tim.tv_sec=(int)time_nanosleep;
+                    tim.tv_nsec= (time_nanosleep-(int)time_nanosleep)*1000000000;
                     /*Time load*/
                     if(nanosleep(&tim,NULL)<0){
                         TEST_ERROR;
@@ -576,12 +580,14 @@ Desc: allows access to the loading dock
 void duck_access_unload(pid_t pidPort){
     struct timespec tim;
     struct sembuf sops_dump;
+    double time_nanosleep;
+
     /*Semaphore Dock*/
     docking(pidPort);
     
-    /*printf("%d:  Scarico\n",getpid());*/
-    tim.tv_sec=0;
-    tim.tv_nsec= (quantity/SO_LOADSPEED)*100000000;
+    time_nanosleep=quantity/SO_LOADSPEED;
+    tim.tv_sec=(int)time_nanosleep;
+    tim.tv_nsec= (time_nanosleep-(int)time_nanosleep)*1000000000;
     if(nanosleep(&tim,NULL)<0){
         TEST_ERROR;
     }

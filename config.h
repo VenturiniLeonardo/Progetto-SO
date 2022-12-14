@@ -7,8 +7,8 @@
 /*PORTS*/
 #define SO_PORTI 10 /*number of ports (int,>= 4)*/
 #define SO_BANCHINE 3 /*maximum number of docks (int)*/
-#define SO_FILL 10000 /*maximum goods capacity of the port*/
-#define SO_LOADSPEED 5/*loading/unloading speed of ports (ton/days)*/
+#define SO_FILL 1000 /*maximum goods capacity of the port*/
+#define SO_LOADSPEED 100/*loading/unloading speed of ports (ton/days)*/
 #define SO_DISTANZA 0.0001 /*minimum distance between two ports*/
 
 /*SHIPS*/
