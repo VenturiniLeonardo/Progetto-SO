@@ -119,6 +119,8 @@ int main(){
 
     tim.tv_sec=0;
     tim.tv_nsec=(distance(currentPort->coord.x,currentPort->coord.y,ship_coords.x,ship_coords.y)/SO_SPEED);
+    printf("aaa\n");
+    printf("d: %f   \n",distance(currentPort->coord.x,currentPort->coord.y,ship_coords.x,ship_coords.y));
     if(nanosleep(&tim,NULL)<0){
         TEST_ERROR;
     }
@@ -146,7 +148,7 @@ int main(){
             tim.tv_nsec=(distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED);
             
             if(nanosleep(&tim,NULL)<0){                   
-                    TEST_ERROR;
+                TEST_ERROR;
             }
 
             /*int(tim.tv_nsec*10^9)*/
@@ -397,7 +399,7 @@ struct port* getSupply(pid_t pid_port){
                         }
                     }
 
-                
+
                     on_type=type+1;
 
                     sops_dump.sem_op=-1;
@@ -590,8 +592,8 @@ void duck_access_unload(pid_t pidPort){
     ship_d->ship_in_port += 1;
     ship_d->ship_sea_goods -= 1;
     /*Dump goods*/
-    good_d->states[on_type].goods_delivered += 1;
-    good_d->states[on_type].goods_on_ship -= 1;
+    good_d->states[on_type].goods_delivered += quantity;
+    good_d->states[on_type].goods_on_ship -= quantity;
     /*Dump ports*/
     port_d->states[get_index_from_pid(pidPort)].goods_receved +=quantity;
     port_d->states[get_index_from_pid(pidPort)].goods_demand -=quantity;

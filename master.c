@@ -24,6 +24,7 @@ int arrContains(struct port [],struct coords ,int );
 int deallocateResources();
 int genRandInt(int,int);
 int printDump(int,struct goods_dump *,struct port_dump *,struct ship_dump *);
+void printFinalDump(int,struct goods_dump *,struct port_dump *,struct ship_dump *);
 void killAllPorts();
 void updateDateExpiry();
 
@@ -144,6 +145,7 @@ int main(){
         printf("Day %d\n",elapsedDays+1);
         /*updateDateExpiry();*/
         if(printDump(dSem,struct_goods_dump,struct_port_dump,struct_ship_dump)){
+            printf("Offerta o richiesta pari a zero.... Terminazione\n");
             elapsedDays = SO_DAYS;
         }else{
             elapsedDays++;
@@ -151,7 +153,7 @@ int main(){
         sleep(1);
 
     }
-
+    printFinalDump(dSem,struct_goods_dump,struct_port_dump,struct_ship_dump);
     killAllPorts();
     deallocateResources();
 }
@@ -346,8 +348,66 @@ int printDump(int dSem,struct goods_dump* good_d,struct port_dump* port_d,struct
     sops_dump.sem_op=1;
     semop(dSem,&sops_dump,1);
 
-    /*return allOffer == 1 || allDemand == 1;*/
-    return 0;
+    return allOffer == 1 || allDemand == 1;
+}
+
+
+void printFinalDump(int dSem,struct goods_dump* good_d,struct port_dump* port_d,struct ship_dump* ship_d){
+    struct sembuf sops_dump;
+    int i;
+    int maxSupply = 0;
+    int indexMaxSupply = -1;
+    int maxDemand = 0;
+    int indexMaxDemand = -1;
+
+    sops_dump.sem_op=-1;
+    semop(dSem,&sops_dump,1);
+    printf("REPORT FINALE\n");
+    printf("MERCI \n");
+    for(i = 0;i<SO_MERCI;i++){
+        printf("Tipo %d:\n",i+1);
+        printf("- Merce in porto %d\n",good_d->states[i].goods_in_port);
+        printf("- Merce sulle navi %d\n",good_d->states[i].goods_on_ship);
+        printf("- Merce scaduta in porto %d\n",good_d->states[i].goods_expired_port);
+        printf("- Merce scaduta in nave %d\n",good_d->states[i].goods_expired_ship);
+        printf("- Merce consegnata %d\n",good_d->states[i].goods_delivered);
+        printf("- Merce presente ad inizio simulazione %d\n",good_d->states[i].goods_in_port+
+                                                            good_d->states[i].goods_on_ship+
+                                                            good_d->states[i].goods_expired_port+
+                                                            good_d->states[i].goods_expired_ship+
+                                                            good_d->states[i].goods_delivered);
+
+    }
+
+    printf("\nPORTI\n");
+    for(i = 0; i< SO_PORTI; i++){
+        if(maxSupply < port_d->states[i].goods_offer){
+            maxSupply = port_d->states[i].goods_offer;
+            indexMaxSupply = i;
+        }
+        if(maxDemand < port_d->states[i].goods_receved){
+            maxDemand = port_d->states[i].goods_receved;
+            indexMaxDemand = i;
+        }
+        printf("Porto %d\n",i+1);
+        printf("- Merce inviata %d\n",port_d->states[i].goods_sended);
+        printf("- Merce ricevuta %d\n",port_d->states[i].goods_receved);
+        printf("- Merce offerta %d\n",port_d->states[i].goods_offer);
+    }
+
+    printf("\nNAVI: \n");
+    printf("- Navi occupano una banchina %d\n",ship_d->ship_in_port);
+    printf("- Navi in mare con carico %d\n",ship_d->ship_sea_goods);
+    printf("- Navi in mare senza carico %d\n",ship_d->ship_sea_no_goods);
+
+    printf("\nRECORD: \n");
+    printf("Il porto %d ha offerto più merce -> %d ton\n",indexMaxSupply+1,maxSupply);
+    printf("Il porto %d ha richiesto più merce -> %d ton\n",indexMaxDemand+1,maxDemand);
+
+
+    sops_dump.sem_op=1;
+    semop(dSem,&sops_dump,1);
+
 }
 
 /*
