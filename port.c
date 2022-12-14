@@ -261,8 +261,8 @@ void reloadExpiryDate(){
     struct sembuf sops_dump;
 
     key_semSupply=ftok("port.c",getpid());
-    semSupply=semget(key_semSupply,1,0666);
-    TEST_ERROR;
+    if((semSupply=semget(key_semSupply,1,0666)) == -1)
+        TEST_ERROR;
     
 
     /*INSERT SUPPLY INTO SHM*/
@@ -270,8 +270,8 @@ void reloadExpiryDate(){
     sops.sem_op=-1;
     sops.sem_flg=0;
 
-    semop(semSupply,&sops,1);
-    TEST_ERROR;
+    if(semop(semSupply,&sops,1) == -1)
+        TEST_ERROR;
 
     for(i=0;i<SO_MERCI;i++){
         if(shmPort->typeGoods[i][0] == 1){
@@ -279,11 +279,11 @@ void reloadExpiryDate(){
                 shmPort->supply[i].date_expiry--;
             else{
                 shmPort->supply[i].date_expiry = -1;
-                shmPort->typeGoods[i][0] == 0;
+                shmPort->typeGoods[i][0] = 0;
                 sops_dump.sem_op=-1;
                 semop(dumpSem,&sops_dump,1);
-                good_d->states[i].goods_in_port -= 1;
-                good_d->states[i].goods_expired_port += 1;
+                good_d->states[i].goods_in_port -= shmPort->supply[i].quantity;
+                good_d->states[i].goods_expired_port += shmPort->supply[i].quantity;
                 sops_dump.sem_op=1;
                 semop(dumpSem,&sops_dump,1);
             }
@@ -294,8 +294,8 @@ void reloadExpiryDate(){
     sops.sem_op=1;
     sops.sem_flg=0;
 
-    semop(semSupply,&sops,1);
-    TEST_ERROR;
+    if(semop(semSupply,&sops,1) == -1)
+        TEST_ERROR;
 
 }
 

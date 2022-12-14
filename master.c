@@ -135,6 +135,7 @@ int main(){
     elapsedDays=0; 
     srand(time(NULL)); 
     while(elapsedDays<SO_DAYS){
+        sleep(1);
         /*nRandPort=rand()%SO_PORTI; 
         kill(ports[nRandPort].pidPort,SIGALRM);  
         for(i=0;i<nRandPort;i++){ 
@@ -143,14 +144,13 @@ int main(){
             
         }*/
         printf("Day %d\n",elapsedDays+1);
-        /*updateDateExpiry();*/
+        updateDateExpiry();
         if(printDump(dSem,struct_goods_dump,struct_port_dump,struct_ship_dump)){
             printf("Offerta o richiesta pari a zero.... Terminazione\n");
             elapsedDays = SO_DAYS;
         }else{
             elapsedDays++;
         }
-        sleep(1);
 
     }
     printFinalDump(dSem,struct_goods_dump,struct_port_dump,struct_ship_dump);

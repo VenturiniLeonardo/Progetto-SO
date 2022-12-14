@@ -118,12 +118,12 @@ int main(){
     /*printf("Prossimo porto: %d %f %f\n",currentPort->pidPort, currentPort->coord.x,currentPort->coord.y);*/
 
     tim.tv_sec=0;
-    tim.tv_nsec=(distance(currentPort->coord.x,currentPort->coord.y,ship_coords.x,ship_coords.y)/SO_SPEED);
-    printf("aaa\n");
-    printf("d: %f   \n",distance(currentPort->coord.x,currentPort->coord.y,ship_coords.x,ship_coords.y));
+    tim.tv_nsec=(distance(currentPort->coord.x,currentPort->coord.y,ship_coords.x,ship_coords.y)/SO_SPEED)*100000000;
     if(nanosleep(&tim,NULL)<0){
         TEST_ERROR;
     }
+
+    printf("%ld\n",tim.tv_nsec);
 
     do{
         /*printf("%d:   Arrivato al porto %d dopo %ld ns\n",getpid(),currentPort->pidPort,tim.tv_nsec);*/
@@ -135,7 +135,7 @@ int main(){
             printf("%d:  Prossimo porto %d\n",getpid(),nextPort->pidPort);
             printf("%d:  Partenza \n",getpid());*/
             tim.tv_sec=0;
-            tim.tv_nsec=(distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED);
+            tim.tv_nsec=(distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED)*100000000;
             prevPort = currentPort;
             currentPort = nextPort;
             if(nanosleep(&tim,NULL)<0){
@@ -145,7 +145,7 @@ int main(){
             /*printf("%d:  Prossimo porto %d\n",getpid(),nextPort->pidPort);
             printf("%d:  Partenza \n",getpid());*/
             tim.tv_sec=0;
-            tim.tv_nsec=(distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED);
+            tim.tv_nsec=(distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED)*100000000;
             
             if(nanosleep(&tim,NULL)<0){                   
                 TEST_ERROR;
@@ -414,7 +414,7 @@ struct port* getSupply(pid_t pid_port){
                     sops_dump.sem_op=1;
                     semop(dumpSem,&sops_dump,1);
                     tim.tv_sec=0;
-                    tim.tv_nsec= quantity/SO_LOADSPEED;
+                    tim.tv_nsec= (quantity/SO_LOADSPEED)*100000000;
                     /*Time load*/
                     if(nanosleep(&tim,NULL)<0){
                         TEST_ERROR;
@@ -581,7 +581,7 @@ void duck_access_unload(pid_t pidPort){
     
     /*printf("%d:  Scarico\n",getpid());*/
     tim.tv_sec=0;
-    tim.tv_nsec= quantity/SO_LOADSPEED;
+    tim.tv_nsec= (quantity/SO_LOADSPEED)*100000000;
     if(nanosleep(&tim,NULL)<0){
         TEST_ERROR;
     }
