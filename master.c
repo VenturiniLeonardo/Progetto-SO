@@ -30,9 +30,8 @@ void updateDateExpiry();
 void stopAllShips();
 int variableUpdate();
 
-struct port *ports; 
-pid_t ships [SO_NAVI];
-
+struct port *ports;
+pid_t * ships;
 
 /*Master main*/
 int main(){
@@ -58,10 +57,7 @@ int main(){
         printf("Error set all variable\n");
         return 0;
     }
-
-    printf("%d  \n",SO_DAYS);
-
-
+    ships = (pid_t *)malloc(sizeof(pid_t) * SO_NAVI);
     /*Semaphore for sync*/
     if((sySem = semget(SY_KEY,1,IPC_CREAT|IPC_EXCL|0666)) == -1){
         fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
@@ -70,6 +66,12 @@ int main(){
 
     if(semctl(sySem,0,SETVAL,SO_NAVI+SO_PORTI+1)<0){
         fprintf(stderr,"Error initializing semaphore, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    /*Shared memory for ports*/
+    if((shmPort = shmget(PORT_POS_KEY,sizeof(struct port)*SO_PORTI,IPC_CREAT|IPC_EXCL|0666 )) == -1){
+        fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
 
@@ -89,29 +91,21 @@ int main(){
         fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
+        struct_goods_dump->states = (struct goods_states *)malloc(sizeof(struct goods_states)*SO_MERCI);
     struct_goods_dump=(struct goods_dump*) shmat(shm_dump_goods,NULL,0);
-    TEST_ERROR;
+    TEST_ERROR; 
 
-    struct_goods_dump->states->goods_delivered = 0;
-    struct_goods_dump->states->goods_expired_port = 0;
-    struct_goods_dump->states->goods_expired_ship = 0;
-    struct_goods_dump->states->goods_in_port = 0;
-    struct_goods_dump->states->goods_on_ship = 0;
 
     /*Shared memory for dump of port*/
 
-     if((shm_dump_port=shmget(PORT_DUMP_KEY,sizeof(struct port_dump),IPC_CREAT |IPC_EXCL|0666)) == -1){
+    if((shm_dump_port=shmget(PORT_DUMP_KEY,sizeof(struct port_dump),IPC_CREAT |IPC_EXCL|0666)) == -1){
         fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
+    
     struct_port_dump=(struct port_dump*)shmat(shm_dump_port,NULL,0);
+    struct_port_dump->states = (struct port_states*) malloc(sizeof(struct port_states) * SO_PORTI);
     TEST_ERROR;
-
-    struct_port_dump->states->dock_occuped = 0;
-    struct_port_dump->states->dock_total = 0;
-    struct_port_dump->states->goods_offer = 0;
-    struct_port_dump->states->goods_receved = 0;
-    struct_port_dump->states->goods_sended = 0;
 
     /*Shared memory for dump of ship*/
 
@@ -130,7 +124,7 @@ int main(){
     /*PORT AND SHIP*/
 
     portGenerator();
-    shipGenerator();
+    /*shipGenerator();*/
 
     sops.sem_num=0;
     sops.sem_op=-1;
@@ -237,13 +231,12 @@ int portGenerator(){
     char x[50];
     char y[50];
     pid_t sonPid;
-    char index_port[SO_PORTI];
+    char index_port[100];
 
-    if((shmPort = shmget(PORT_POS_KEY,sizeof(struct port)*SO_PORTI,IPC_CREAT|IPC_EXCL|0666 )) == -1){
+    if((shmPort = shmget(PORT_POS_KEY,0,0666 )) == -1){
         fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
-
     ports = (struct port*) shmat(shmPort,NULL,0);
     if (ports == (void *) -1){
         fprintf(stderr,"Error assing ports to shared memory, %d: %s\n",errno,strerror(errno));
@@ -251,14 +244,12 @@ int portGenerator(){
     }
 
     /*ports=malloc(sizeof(struct port)*SO_PORTI);*/
-    
     ports[0].coord.x = ports[0].coord.y = 0; 
     ports[1].coord.x = ports[1].coord.y = SO_LATO; 
     ports[2].coord.x = 0; 
     ports[2].coord.y = SO_LATO;
     ports[3].coord.x = SO_LATO; 
     ports[3].coord.y = 0;
-
     /*generating SO_PORTI-4 ports*/
     for (i=4;i<SO_PORTI;i++){  
         do{
@@ -266,7 +257,7 @@ int portGenerator(){
         }while(arrContains(ports,myC,i));
         ports[i].coord=myC;
     }
-    
+
     for(i = 0;i < SO_PORTI;i++){
         sprintf(x,"%f", ports[i].coord.x);
         sprintf(y,"%f", ports[i].coord.y);
@@ -288,7 +279,6 @@ int portGenerator(){
             break;
         }
     }
-
     return 0;
 }
 
@@ -411,6 +401,7 @@ void printFinalDump(int dSem,struct goods_dump* good_d,struct port_dump* port_d,
         printf("- Merce offerta %d\n",port_d->states[i].goods_offer);
     }
 
+
     printf("\nNAVI: \n");
     printf("- Navi occupano una banchina %d\n",ship_d->ship_in_port);
     printf("- Navi in mare con carico %d\n",ship_d->ship_sea_goods);
@@ -434,7 +425,7 @@ Desc: returns 0 if deallocate all resources, -1 otherwise
 
 void killAllPorts(){
     int i;
-    for(i = 0; i< SO_PORTI;i++){
+    for(i = 0 ; i< SO_PORTI;i++){
         kill(ports[i].pidPort,SIGTERM);
     }
 }
@@ -459,45 +450,52 @@ Desc: returns 0 if deallocate all resources, -1 otherwise
 */
 
 int variableUpdate(){
-    char buffer[100];
-	char VarName[sizeof  buffer];
-	char VarValue[sizeof  buffer];
+    char buffer[256];
+	char *variable;
+    char * value;
     FILE *f;
+    int VarValue;
 	f= fopen("variableFile.txt", "r");
 
-	if (fgets(buffer, sizeof buffer, f) == NULL)
-        return 1;
-	if (sscanf(buffer, "%[^\n=]=%[^\n]", VarName, VarValue) != 2) 
-		return 1;
-	else{
-        if(strcmp(VarName,"SO_DAYS"))
-            SO_DAYS = atoi(VarValue);
-        if(strcmp(VarName,"SO_PORTI"))
-            SO_PORTI = atoi(VarValue);
-        if(strcmp(VarName,"SO_BANCHINE"))
-            SO_BANCHINE = atoi(VarValue);
-        if(strcmp(VarName,"SO_FILL"))
-            SO_FILL = atoi(VarValue);
-        if(strcmp(VarName,"SO_LOADSPEED"))
-            SO_LOADSPEED = atoi(VarValue);
-        if(strcmp(VarName,"SO_DISTANZA"))
-            SO_DISTANZA = atoi(VarValue);
-        if(strcmp(VarName,"SO_NAVI"))
-            SO_NAVI = atoi(VarValue);
-        if(strcmp(VarName,"SO_SPEED"))
-            SO_SPEED = atoi(VarValue);
-        if(strcmp(VarName,"SO_CAPACITY"))
-            SO_CAPACITY = atoi(VarValue);
-        if(strcmp(VarName,"SO_MERCI"))
-            SO_LOADSPEED = atoi(VarValue);
-        if(strcmp(VarName,"SO_SIZE"))
-            SO_DISTANZA = atoi(VarValue);
-        if(strcmp(VarName,"SO_MIN_VITA"))
-            SO_NAVI = atoi(VarValue);
-        if(strcmp(VarName,"SO_MAX_VITA"))
-            SO_SPEED = atoi(VarValue);
-        if(strcmp(VarName,"SO_LATO"))
-            SO_CAPACITY = atoi(VarValue);
+    while(fgets(buffer, 256, f) != NULL){
+        variable = strtok(buffer, "=");
+        value = strtok(NULL, "=");
+        if(strcmp(variable,"SO_DAYS") == 0)
+            SO_DAYS = atoi(value);
+        if(strcmp(variable,"SO_PORTI")== 0){
+            SO_PORTI = atoi(value);
+            if(SO_PORTI < 4)
+                return 1;
+        }
+        if(strcmp(variable,"SO_BANCHINE")== 0)
+            SO_BANCHINE = atoi(value);
+        if(strcmp(variable,"SO_FILL ")== 0)
+            SO_FILL = atof(value);
+        if(strcmp(variable,"SO_LOADSPEED")== 0)
+            SO_LOADSPEED = atof(value);
+        if(strcmp(variable,"SO_DISTANZA")== 0)
+            SO_DISTANZA = atof(value);
+        if(strcmp(variable,"SO_NAVI")== 0){
+            SO_NAVI = atoi(value);
+            if(SO_NAVI < 1)
+                return 1;
+        }
+        if(strcmp(variable,"SO_SPEED")== 0)
+            SO_SPEED = atof(value);
+        if(strcmp(variable,"SO_CAPACITY")== 0)
+            SO_CAPACITY = atoi(value);
+        if(strcmp(variable,"SO_MERCI")== 0)
+            SO_LOADSPEED = atoi(value);
+        if(strcmp(variable,"SO_SIZE")== 0)
+            SO_SIZE = atoi(value);
+        if(strcmp(variable,"SO_MIN_VITA")== 0)
+            SO_NAVI = atoi(value);
+        if(strcmp(variable,"SO_MAX_VITA")== 0)
+            SO_SPEED = atoi(value);
+        if(strcmp(variable,"SO_LATO")== 0){
+            SO_LATO = atof(value);
+        }
+            
 
     }
 
@@ -534,6 +532,8 @@ int deallocateResources(){
     struct port_dump * struct_port_dump;
     struct ship_dump *struct_ship_dump;
     struct goods_dump *struct_goods_dump;
+
+    free(ships);
 
     /*Sy SEMAPHORE */
 
@@ -574,7 +574,7 @@ int deallocateResources(){
     struct_goods_dump=(struct goods_dump*) shmat(shm_dump_goods,NULL,0);
     if(struct_goods_dump == (void *) -1)
         TEST_ERROR;
-
+    free(struct_goods_dump->states);
     if(shmdt(struct_goods_dump)==-1)
         TEST_ERROR;
     
@@ -588,8 +588,11 @@ int deallocateResources(){
         TEST_ERROR;
     }
     struct_port_dump=(struct port_dump*)shmat(shm_dump_port,NULL,0);
+    free(struct_port_dump->states);
+
     if(struct_port_dump == (void *) -1)
         TEST_ERROR;
+
     if(shmdt(struct_port_dump) == -1)
         TEST_ERROR;
 

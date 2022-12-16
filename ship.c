@@ -31,16 +31,17 @@ struct port* nearPort(pid_t,pid_t ,struct coords);
 int get_index_from_pid(pid_t);
 void deallocateResources();
 int getMaxExpiryDate(struct good[]);
+void reloadExpiryDate();
+int variableUpdate();
+
 
 int dumpSem;
-int quantity;
-int on_type;
+struct good goods_on; 
 struct port_dump* port_d;
 struct port *ports;
 struct ship_dump *ship_d;
 struct goods_dump* good_d;
 int time_expry_on;
-int end = 1;
 struct shmSinglePort * shmPort;
 
 /*Handler*/
@@ -50,18 +51,19 @@ void signalHandler(int signal){
             printf("SIGALARM\n");
         break;
         case SIGUSR1:
-            /*reloadExpiryDate();*/
+            reloadExpiryDate();
         break;
         case SIGTERM:
             deallocateResources();
-            end = 0;
+            exit(EXIT_SUCCESS);
         break;
     }
 }
 
 int main(){
     int shm_ports;
-    struct timespec tim;
+    struct timespec req;
+    struct timespec rem ;
     int sySem;
     int shmPort;
     struct sembuf sops; 
@@ -76,17 +78,21 @@ int main(){
     int shm_dump_ship;
     int shm_dump_goods; 
     double distanza;
+
+    if(variableUpdate()){
+        printf("Error set all variable\n");
+        return 0;
+    }
     ship_coords=generateRandCoords();
-
-
+    
     if((shm_ports = shmget(PORT_POS_KEY,0,0666 )) == -1){
         fprintf(stderr,"Error shared memory, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
-
-    ports=(struct port *) shmat(shmPort,NULL,SHM_RDONLY);
+    
+    ports= (struct port *) shmat(shmPort,NULL,SHM_RDONLY);
     if (ports == (void *) -1){
-        fprintf(stderr,"Error assing ports to shared memory, %d: %s\n",errno,strerror(errno));
+        fprintf(stderr,"Error shared memory ports in ship, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
 
@@ -142,18 +148,25 @@ int main(){
     sops.sem_op=0;
     semop(sySem,&sops,1);
 
-
+    
     /*At start Ship goes to nearest port*/
     currentPort = prevPort = nearPort(0,0,ship_coords);
     /*printf("Prossimo porto: %d %f %f\n",currentPort->pidPort, currentPort->coord.x,currentPort->coord.y);*/
     distanza=distance(currentPort->coord.x,currentPort->coord.y,ship_coords.x,ship_coords.y)/SO_SPEED;
-    tim.tv_sec=(int)distanza;
-    tim.tv_nsec=(distanza-(int)distanza)*10000000;
-    if(nanosleep(&tim,NULL)<0){
-        TEST_ERROR;
+    rem.tv_sec=0;
+    rem.tv_nsec=0;
+    req.tv_sec=(int)distanza;
+    req.tv_nsec=(distanza-(int)distanza)*10000000;
+    while(nanosleep(&req,&rem)<0){
+        if(errno!=EINTR){
+            TEST_ERROR;
+        }else{
+            req.tv_sec=rem.tv_sec;
+            req.tv_nsec=rem.tv_nsec;
+        }
     }
 
-    printf("%ld\n",tim.tv_nsec);
+    printf("%ld\n",req.tv_nsec);
 
     do{
         /*printf("%d:   Arrivato al porto %d dopo %ld ns\n",getpid(),currentPort->pidPort,tim.tv_nsec);*/
@@ -164,33 +177,39 @@ int main(){
             printf("%d:  Prossimo porto %d\n",getpid(),nextPort->pidPort);
             printf("%d:  Partenza \n",getpid());*/
             distanza=distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED;
-            tim.tv_sec=(int)distanza;
-            tim.tv_nsec=(distanza-(int)distanza)*1000000000;
+            req.tv_sec=(int)distanza;
+            req.tv_nsec=(distanza-(int)distanza)*1000000000;
             prevPort = currentPort;
             currentPort = nextPort;
-            if(nanosleep(&tim,NULL)<0){
-                if(end=1)
+            while(nanosleep(&req,&rem)<0){
+                if(errno!=EINTR){
                     TEST_ERROR;
+                }else{
+                    req.tv_sec=rem.tv_sec;
+                    req.tv_nsec=rem.tv_nsec;
+                }
             }
         }else{
             /*printf("%d:  Prossimo porto %d\n",getpid(),nextPort->pidPort);
             printf("%d:  Partenza \n",getpid());*/
             distanza=distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED;
-            tim.tv_sec=(int)distanza;
-            tim.tv_nsec=(distanza-(int)distanza)*1000000000;
+            req.tv_sec=(int)distanza;
+            req.tv_nsec=(distanza-(int)distanza)*1000000000;
             
-            if(nanosleep(&tim,NULL)<0){                   
-                 if(end=1)
+            while(nanosleep(&req,&rem)<0){
+                if(errno!=EINTR){
                     TEST_ERROR;
+                }else{
+                    req.tv_sec=rem.tv_sec;
+                    req.tv_nsec=rem.tv_nsec;
+                }
             }
 
-            /*int(tim.tv_nsec*10^9)*/
-
             prevPort = currentPort;
-            currentPort = nextPort;
-            duck_access_unload(currentPort->pidPort);
-        }
-
+            currentPort =nextPort;
+            if(goods_on.date_expiry>0)
+                duck_access_unload(currentPort->pidPort);
+            }
         i++;
     }while(i<SO_DAYS);
 
@@ -262,13 +281,16 @@ int docking(pid_t pid_port){
 
         /*Semaphore Dock*/
         if((dockSem = semget(pid_port,1,0666))==-1){
-            if(end!=1)
-                TEST_ERROR;
+            TEST_ERROR;
         }
         sops.sem_num=0;
         sops.sem_op=-1;
         sops.sem_flg=0;
-        semop(dockSem,&sops,1); 
+        while(semop(dockSem,&sops,1)==-1){
+            if(errno!=EINTR)
+                TEST_ERROR;
+        }
+
 
         return 0;
 }
@@ -285,13 +307,16 @@ int undocking(pid_t pid_port){
 
         /*Semaphore Dock*/
         if((dockSem = semget(pid_port,1,0666)) == -1){
-            if(end=1)
-                TEST_ERROR;
+            TEST_ERROR;
         }
         sops.sem_num=0;
         sops.sem_op=1;
         sops.sem_flg=0;
-        semop(dockSem,&sops,1); 
+        while(semop(dockSem,&sops,1)==-1){
+            if(errno!=EINTR)
+                TEST_ERROR;
+        }
+ 
 
     return 0;
 }
@@ -335,7 +360,8 @@ struct port* getSupply(pid_t pid_port){
         int min_expry=SO_MAX_VITA+1;
         int flagGood = 0;
         struct port* sendPort;
-        struct timespec tim;
+        struct timespec req;
+        struct timespec rem;
         struct sembuf sops_dump;
         double time_nanosleep;
 
@@ -343,32 +369,33 @@ struct port* getSupply(pid_t pid_port){
         /*Get shm semaphore*/
         supplyKey=ftok("./port.c",pid_port);
         if((semSupply = semget(supplyKey,1,0666)) == -1){
-            if(end=1)
-                TEST_ERROR;
+            TEST_ERROR;
         }
         
         sops.sem_num=0;
         sops.sem_op = -1;
         sops.sem_flg=0;
-        semop(semSupply,&sops,1); 
+        while(semop(semSupply,&sops,1)==-1){
+            if(errno!=EINTR)
+                TEST_ERROR;
+        }
+
         
 
         /*Access to supply shm mstruct port[] near_ports()od*)shmat(shmSupply,NULL,0);*/
         if((shmSupply = shmget(pid_port,0,0666)) == -1){
-            if(end=1)
-                TEST_ERROR; 
+            TEST_ERROR; 
         }
 
         shmPort = (struct shmSinglePort *)shmat(shmSupply,NULL,0);
         if(shmPort == (void *) -1){
-            if(end=1)
-                TEST_ERROR;
+            TEST_ERROR;
         }
 
         /*printf("%d : Cerco offerta \n",getpid());*/
         /*Search for min date expiry in current port*/
         for(i=0;i<SO_MERCI;i++){
-            if((shmPort->typeGoods[i][0] == 1 )&&(shmPort->supply[i].date_expiry < min_exipry && shmPort->supply[i].date_expiry > 0)){
+            if((shmPort->supplyGoods[i] == 1 )&&(shmPort->supply[i].date_expiry < min_exipry && shmPort->supply[i].date_expiry > 0)){
                 trovato = 1;
                 min_exipry = shmPort->supply[i].date_expiry;
                 type = i;
@@ -381,7 +408,11 @@ struct port* getSupply(pid_t pid_port){
             sops.sem_num=0;
             sops.sem_op = 1;
             sops.sem_flg=0;
-            semop(semSupply,&sops,1); 
+            while(semop(semSupply,&sops,1)==-1){
+                if(errno!=EINTR)
+                TEST_ERROR;
+            }
+
        
             sendPort = (struct port*)malloc(sizeof(struct port));
             sendPort->coord.x = -1;
@@ -403,10 +434,8 @@ struct port* getSupply(pid_t pid_port){
             for(i=0;i<portSize && flagGood == 0;i++){
             
                 if((msgDemand = msgget(portNear[i].pidPort,0666)) == -1){
-                    if(end=1){
-                        fprintf(stderr,"Error messagge queue demand in ship, %d: %s\n",errno,strerror(errno));
-                        exit(EXIT_FAILURE);
-                    }
+                    fprintf(stderr,"Error messagge queue demand in ship, %d: %s\n",errno,strerror(errno));
+                    exit(EXIT_FAILURE);
                 }
                 /*printf("Ricerca per domanda %d\n",getpid());*/
                 
@@ -416,51 +445,63 @@ struct port* getSupply(pid_t pid_port){
                     /*printf("%d   -> s: %d d: %d\n",getpid(),shmPort->supply[type].quantity,demandGood.quantity);*/
                     if(shmPort->supply[type].quantity>=demandGood.quantity){
                         if(demandGood.quantity<=SO_CAPACITY){
-                            quantity = demandGood.quantity;
+                            goods_on.quantity = demandGood.quantity;
                             shmPort->supply[type].quantity-=demandGood.quantity;
                         }else{
                             shmPort->supply[type].quantity-=SO_CAPACITY;
                             demandGood.quantity -= SO_CAPACITY; 
-                            quantity = SO_CAPACITY;
+                            goods_on.quantity = SO_CAPACITY;
                             msgsnd(msgDemand,&demandGood,sizeof(int),0);
                         }
                     }else{
                         if(shmPort->supply[type].quantity<=SO_CAPACITY){
                             shmPort->supply[type].date_expiry = -1;
-                            shmPort->typeGoods[type][0] = 0;
+                            shmPort->supplyGoods[type] = 0;
                             demandGood.quantity -= shmPort->supply[type].quantity;
-                            quantity = shmPort->supply[type].quantity;
+                            goods_on.quantity = shmPort->supply[type].quantity;
                             msgsnd(msgDemand,&demandGood,sizeof(int),0);
                         }else{
                             shmPort->supply[type].quantity-=SO_CAPACITY;    
                             demandGood.quantity -= SO_CAPACITY;
-                            quantity = SO_CAPACITY;
+                            goods_on.quantity = SO_CAPACITY;
                             msgsnd(msgDemand,&demandGood,sizeof(int),0);                       
                         }
                     }
 
-
-                    on_type=type+1;
+                    goods_on.type=type+1;
+                    goods_on.date_expiry=shmPort->supply[type].date_expiry;
                     
                     sops_dump.sem_op=-1;
-                    semop(dumpSem,&sops_dump,1);
+                    while(semop(dumpSem,&sops_dump,1)==-1){
+                        if(errno!=EINTR)
+                            TEST_ERROR;
+                    }
+
                     /*Dump goods*/
-                    good_d->states[type].goods_in_port -= quantity;
-                    good_d->states[type].goods_on_ship += quantity;
+                    good_d->states[type].goods_in_port -= goods_on.quantity;
+                    good_d->states[type].goods_on_ship += goods_on.quantity;
                     
                     /*Dump ports*/ 
-                    port_d->states[get_index_from_pid(pid_port)].goods_sended+=quantity; 
-                    port_d->states[get_index_from_pid(pid_port)].goods_offer-=quantity; 
+                    port_d->states[get_index_from_pid(pid_port)].goods_sended+=goods_on.quantity; 
+                    port_d->states[get_index_from_pid(pid_port)].goods_offer-=goods_on.quantity; 
                     sops_dump.sem_op=1;
-                    semop(dumpSem,&sops_dump,1);
-
-                    time_nanosleep=quantity/SO_LOADSPEED;
-                    tim.tv_sec=(int)time_nanosleep;
-                    tim.tv_nsec= (time_nanosleep-(int)time_nanosleep)*1000000000;
-                    /*Time load*/
-                    if(nanosleep(&tim,NULL)<0){
-                        if(end=1)
+                    while(semop(dumpSem,&sops_dump,1)==-1){
+                        if(errno!=EINTR)
                             TEST_ERROR;
+                    }
+
+
+                    time_nanosleep=goods_on.quantity/SO_LOADSPEED;
+                    req.tv_sec=(int)time_nanosleep;
+                    req.tv_nsec= (time_nanosleep-(int)time_nanosleep)*1000000000;
+                    /*Time load*/
+                    while(nanosleep(&req,&rem)<0){
+                        if(errno!=EINTR){
+                            TEST_ERROR;
+                    }else{
+                        req.tv_sec=rem.tv_sec;
+                        req.tv_nsec=rem.tv_nsec;
+                    }
                     }
                    
                     /*printf("%d:  Merce caricata %d presso il porto %d\n",getpid(),quantity,pid_port);*/
@@ -476,7 +517,7 @@ struct port* getSupply(pid_t pid_port){
                 /*Find next min exipry date*/
                 for(i=0;i<SO_MERCI;i++){
                     
-                    if((shmPort->typeGoods[i][0] == 1)&&(shmPort->supply[i].date_expiry > min_exipry_prev && shmPort->supply[i].date_expiry < min_exipry) ){
+                    if((shmPort->supplyGoods[i] == 1)&&(shmPort->supply[i].date_expiry > min_exipry_prev && shmPort->supply[i].date_expiry < min_exipry) ){
                         min_exipry= shmPort->supply[i].date_expiry;
                         type = i;
                     }
@@ -492,7 +533,11 @@ struct port* getSupply(pid_t pid_port){
         sops.sem_num=0;
         sops.sem_op= 1;
         sops.sem_flg=0;
-        semop(semSupply,&sops,1); 
+        while(semop(semSupply,&sops,1)==-1){
+            if(errno!=EINTR)
+                TEST_ERROR;
+        }
+
 
         if(flagGood){
             shmdt(shmPort);
@@ -529,6 +574,7 @@ Input: pid_t, double, int
 Output: struct port*
 Desc: returns an array containing the ports included in the max_distance and updates the int length
 */
+
 struct port* near_ports(pid_t currPort,double max_distance,int *length){
     struct port *ports;
     struct port *port_return;
@@ -571,14 +617,22 @@ struct port* duck_access_load(pid_t pid_port){
     docking(pid_port);
 
     sops_dump.sem_op=-1;
-    semop(dumpSem,&sops_dump,1);
+    while(semop(dumpSem,&sops_dump,1)==-1){
+            if(errno!=EINTR)
+                TEST_ERROR;
+    }
+
     /*Dump ships*/
     ship_d->ship_in_port += 1;
     ship_d->ship_sea_no_goods -= 1;
     /*Dump ports*/
     port_d->states[get_index_from_pid(pid_port)].dock_occuped++;
     sops_dump.sem_op=1;
-    semop(dumpSem,&sops_dump,1);
+    while(semop(dumpSem,&sops_dump,1)==-1){
+        if(errno!=EINTR)
+            TEST_ERROR;
+    }
+
 
     
     /*printf("%d:  Effettutato attracco %d\n",getpid(),pid_port);*/
@@ -586,9 +640,13 @@ struct port* duck_access_load(pid_t pid_port){
     
     undocking(pid_port);
     sops_dump.sem_op=-1;  
-    semop(dumpSem,&sops_dump,1);
-    good_d->states[on_type].goods_on_ship += quantity;
-    good_d->states[on_type].goods_in_port -= quantity;
+    while(semop(dumpSem,&sops_dump,1)==-1){
+        if(errno!=EINTR)
+            TEST_ERROR;
+    }
+
+    good_d->states[goods_on.type].goods_on_ship += goods_on.quantity;
+    good_d->states[goods_on.type].goods_in_port -= goods_on.quantity;
     /*Dump ships*/
     ship_d->ship_in_port -= 1;
     if(ret_get_supply->pidPort == 0)
@@ -598,7 +656,11 @@ struct port* duck_access_load(pid_t pid_port){
     /*Dump ports*/
     port_d->states[get_index_from_pid(pid_port)].dock_occuped--;
     sops_dump.sem_op=1;
-    semop(dumpSem,&sops_dump,1);
+    while(semop(dumpSem,&sops_dump,1)==-1){
+        if(errno!=EINTR)
+            TEST_ERROR;
+    }
+
     
     
     /*printf("%d:  Lascio il molo %d\n",getpid(),pid_port);*/
@@ -611,48 +673,65 @@ Output: void
 Desc: allows access to the loading dock
 */
 void duck_access_unload(pid_t pidPort){
-    struct timespec tim;
+    struct timespec req;
+    struct timespec rem;
     struct sembuf sops_dump;
     double time_nanosleep;
 
     /*Semaphore Dock*/
     docking(pidPort);
     
-    time_nanosleep=quantity/SO_LOADSPEED;
-    tim.tv_sec=(int)time_nanosleep;
-    tim.tv_nsec= (time_nanosleep-(int)time_nanosleep)*1000000000;
-    if(nanosleep(&tim,NULL)<0){
-        if(end=1)
+    time_nanosleep=goods_on.quantity/SO_LOADSPEED;
+    req.tv_sec=(int)time_nanosleep;
+    req.tv_nsec= (time_nanosleep-(int)time_nanosleep)*1000000000;
+    while(nanosleep(&req,&rem)<0){
+        if(errno!=EINTR){
             TEST_ERROR;
+        }else{
+            req.tv_sec=rem.tv_sec;
+            req.tv_nsec=rem.tv_nsec;
+        }
     }
     
     sops_dump.sem_op=-1;
-    semop(dumpSem,&sops_dump,1);
+    while(semop(dumpSem,&sops_dump,1)==-1){
+        if(errno!=EINTR)
+            TEST_ERROR;semop(dumpSem,&sops_dump,1);
+    }
+
     /*Dump ships*/
     ship_d->ship_in_port += 1;
     ship_d->ship_sea_goods -= 1;
     /*Dump goods*/
-    good_d->states[on_type].goods_delivered += quantity;
-    good_d->states[on_type].goods_on_ship -= quantity;
+    good_d->states[goods_on.type].goods_delivered += goods_on.quantity;
+    good_d->states[goods_on.type].goods_on_ship -= goods_on.quantity;
     /*Dump ports*/
-    port_d->states[get_index_from_pid(pidPort)].goods_receved +=quantity;
-    port_d->states[get_index_from_pid(pidPort)].goods_demand -=quantity;
+    port_d->states[get_index_from_pid(pidPort)].goods_receved +=goods_on.quantity;
+    port_d->states[get_index_from_pid(pidPort)].goods_demand -=goods_on.quantity;
     /*Dump ports*/
     port_d->states[get_index_from_pid(pidPort)].dock_occuped++;
     sops_dump.sem_op=1;
-    semop(dumpSem,&sops_dump,1);
-
+    while(semop(dumpSem,&sops_dump,1)==-1){
+        if(errno!=EINTR)
+            TEST_ERROR;
+    }
     undocking(pidPort);
     
     sops_dump.sem_op=-1;
-    semop(dumpSem,&sops_dump,1);
+    while(semop(dumpSem,&sops_dump,1)==-1){
+        if(errno!=EINTR)
+            TEST_ERROR;
+    }
     /*Dump ships*/
     ship_d->ship_in_port -= 1;
     ship_d->ship_sea_no_goods += 1;
     /*Dump ports*/
     port_d->states[get_index_from_pid(pidPort)].dock_occuped--;
     sops_dump.sem_op=1;
-    semop(dumpSem,&sops_dump,1);
+    while(semop(dumpSem,&sops_dump,1)==-1){
+        if(errno!=EINTR)
+            TEST_ERROR;
+    }
     
 }
 
@@ -671,4 +750,69 @@ void deallocateResources(){
     shmdt(ship_d);
     shmdt(good_d);
     shmdt(shmPort);
+}
+
+void reloadExpiryDate(){
+    goods_on.date_expiry-=1;
+}
+
+
+/*
+Input: void
+Output: int
+Desc: returns 0 if deallocate all resources, -1 otherwise 
+*/
+
+int variableUpdate(){
+    char buffer[256];
+	char *variable;
+    char * value;
+    FILE *f;
+    int VarValue;
+	f= fopen("variableFile.txt", "r");
+
+    while(fgets(buffer, 256, f) != NULL){
+        variable = strtok(buffer, "=");
+        value = strtok(NULL, "=");
+        if(strcmp(variable,"SO_DAYS") == 0)
+            SO_DAYS = atoi(value);
+        if(strcmp(variable,"SO_PORTI")== 0){
+            SO_PORTI = atoi(value);
+            if(SO_PORTI < 4)
+                return 1;
+        }
+        if(strcmp(variable,"SO_BANCHINE")== 0)
+            SO_BANCHINE = atoi(value);
+        if(strcmp(variable,"SO_FILL ")== 0)
+            SO_FILL = atof(value);
+        if(strcmp(variable,"SO_LOADSPEED")== 0)
+            SO_LOADSPEED = atof(value);
+        if(strcmp(variable,"SO_DISTANZA")== 0)
+            SO_DISTANZA = atof(value);
+        if(strcmp(variable,"SO_NAVI")== 0){
+            SO_NAVI = atoi(value);
+            if(SO_NAVI < 1)
+                return 1;
+        }
+        if(strcmp(variable,"SO_SPEED")== 0)
+            SO_SPEED = atof(value);
+        if(strcmp(variable,"SO_CAPACITY")== 0)
+            SO_CAPACITY = atoi(value);
+        if(strcmp(variable,"SO_MERCI")== 0)
+            SO_LOADSPEED = atoi(value);
+        if(strcmp(variable,"SO_SIZE")== 0)
+            SO_SIZE = atoi(value);
+        if(strcmp(variable,"SO_MIN_VITA")== 0)
+            SO_NAVI = atoi(value);
+        if(strcmp(variable,"SO_MAX_VITA")== 0)
+            SO_SPEED = atoi(value);
+        if(strcmp(variable,"SO_LATO")== 0){
+            SO_LATO = atof(value);
+        }
+            
+
+    }
+
+	fclose(f);
+    return 0;
 }

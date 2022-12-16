@@ -23,6 +23,7 @@ int generatorDemand();
 int generatorSupply();
 void reloadExpiryDate();
 void deallocateResources();
+int variableUpdate();
 
 struct port_dump* port_d;
 int mqDemand;
@@ -53,7 +54,7 @@ void signalHandler(int signal){
 
 /*Port Main*/
 int main(int argc,char*argv[]){
-    int nDocks = generatorDock();
+    int nDocks;
     int currFill = 0;
     int dockSem;
     struct sigaction sa;
@@ -70,8 +71,13 @@ int main(int argc,char*argv[]){
     int shm_dump_goods;
     quantityDemand = 0;
     quantitySupply = 0;
-    
+
     my_index=atoi(argv[1]);
+    if(variableUpdate()){
+        printf("Error set all variable\n");
+        return 0;
+    }
+    nDocks = generatorDock();
     /*Semaphore creation docks*/
 
     if((dockSem = semget(getpid(),1,IPC_CREAT|IPC_EXCL|0666)) == -1){
@@ -80,14 +86,12 @@ int main(int argc,char*argv[]){
     if(semctl(dockSem,0,SETVAL,nDocks) == -1){
         TEST_ERROR;
     }
-
     /*Dump */
     if((shm_dump_port=shmget(PORT_DUMP_KEY,sizeof(struct port_dump),0666))==-1)
         TEST_ERROR;
     port_d=(struct port_dump*)shmat(shm_dump_port,NULL,0);
-        TEST_ERROR;
+        printf("%d\n",port_d->states[my_index].goods_offer);
     port_d->states[my_index].dock_total = nDocks;
-
     /*Dump  for goods*/
     if((shm_dump_goods = shmget(GOODS_DUMP_KEY,sizeof(struct goods_dump),0666 )) == -1){
         fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
@@ -97,11 +101,13 @@ int main(int argc,char*argv[]){
     
     TEST_ERROR;
 
+
     /*Sem for dump*/
     if((dumpSem = semget(DUMP_KEY,1,0666)) == -1){
         fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
+
 
     /*Sem creation for Supply */
     key_semSupply=ftok("port.c",getpid());
@@ -117,16 +123,14 @@ int main(int argc,char*argv[]){
     }
 
     /*SHM creation for offer*/
+    shmPort->supply = malloc(sizeof(struct good)*SO_MERCI);
+    shmPort->demandGoods = malloc(sizeof(int)*SO_MERCI);
+    shmPort->supplyGoods = malloc(sizeof(int)*SO_MERCI);
     shm_offer=shmget(getpid(),sizeof(struct shmSinglePort), IPC_CREAT | IPC_EXCL | 0666);
     TEST_ERROR;  
     shmPort = (struct shmSinglePort *)shmat(shm_offer, NULL, 0);
     if(shmPort == (void *) -1)
         TEST_ERROR;
-    for(i=0;i<SO_MERCI;i++){
-        for(j=0;j<2;j++){
-            shmPort->typeGoods[i][j]=0;
-        }
-    }
 
     /*GENERATE SUPPLY AND DEMAND*/
     generatorSupply();
@@ -148,6 +152,7 @@ int main(int argc,char*argv[]){
         exit(EXIT_FAILURE);
     }
 
+    printf("Pronto\n");
     
     sops.sem_num=0;
     sops.sem_op=-1;
@@ -175,6 +180,7 @@ Desc: return random int between 1 and SO_BANCHINE
 */
 int generatorDock(){
     srand(time(NULL));
+    printf("%d\n",SO_BANCHINE);
     return (rand()%SO_BANCHINE)+1;
 }
 
@@ -209,13 +215,13 @@ int generatorSupply(){
         newGood.type = (rand() % SO_MERCI)+1;
         
         i++;
-    }while((shmPort->typeGoods[newGood.type-1][1] == 1 || shmPort->typeGoods[newGood.type-1][0] == 1) && i < SO_MERCI);
+    }while((shmPort->demandGoods[newGood.type-1] == 1 || shmPort->supplyGoods[newGood.type-1] == 1) && i < SO_MERCI);
 
     if(i == SO_MERCI){
         return -1;
     }
 
-    shmPort->typeGoods[newGood.type-1][0] = 1;
+    shmPort->supplyGoods[newGood.type-1] = 1;
     newGood.quantity = SO_FILL/SO_PORTI;
     
     if(newGood.quantity > SO_FILL-quantitySupply)
@@ -275,12 +281,12 @@ void reloadExpiryDate(){
     sops.sem_flg=0;
 
     for(i=0;i<SO_MERCI;i++){
-        if(shmPort->typeGoods[i][0] == 1){
+        if(shmPort->supplyGoods[i] == 1){
             if(shmPort->supply[i].date_expiry > 0)
                 shmPort->supply[i].date_expiry--;
             else{
                 shmPort->supply[i].date_expiry = -1;
-                shmPort->typeGoods[i][0] = 0;
+                shmPort->supplyGoods[i]= 0;
                 sops_dump.sem_op=-1;
                 semop(dumpSem,&sops_dump,1);
                 good_d->states[i].goods_in_port -= shmPort->supply[i].quantity;
@@ -329,11 +335,11 @@ int generatorDemand(){
         msg.type = (rand() % SO_MERCI)+1;
         i++;
 
-    }while((shmPort->typeGoods[msg.type-1][0] == 0 && shmPort->typeGoods[msg.type-1][1] == 0)&& i < SO_MERCI);
+    }while((shmPort->demandGoods[msg.type-1] == 0 && shmPort->supplyGoods[msg.type-1] == 0)&& i < SO_MERCI);
     if(i == SO_MERCI+1){
         return -1;
     }
-    shmPort->typeGoods[msg.type-1][1] = 1;
+    shmPort->demandGoods[msg.type-1] = 1;
     srand(time(NULL));
 
     msg.quantity = (rand() % (SO_FILL-quantityDemand))+1;
@@ -398,6 +404,7 @@ void deallocateResources(){
     if((shm_offer=shmget(getpid(),sizeof(struct shmSinglePort),0666) ) == -1){
         TEST_ERROR;
     }
+    /*MANCA FREE                                                   ---------------------------------------------*/
     if((shmctl(shm_offer,IPC_RMID,0)) == -1){
         TEST_ERROR;
     }
@@ -411,3 +418,63 @@ void deallocateResources(){
     }
     
 } 
+
+/*
+Input: void
+Output: int
+Desc: returns 0 if deallocate all resources, -1 otherwise 
+*/
+
+int variableUpdate(){
+    char buffer[256];
+	char *variable;
+    char * value;
+    FILE *f;
+    int VarValue;
+	f= fopen("variableFile.txt", "r");
+
+    while(fgets(buffer, 256, f) != NULL){
+        variable = strtok(buffer, "=");
+        value = strtok(NULL, "=");
+        if(strcmp(variable,"SO_DAYS") == 0)
+            SO_DAYS = atoi(value);
+        if(strcmp(variable,"SO_PORTI")== 0){
+            SO_PORTI = atoi(value);
+            if(SO_PORTI < 4)
+                return 1;
+        }
+        if(strcmp(variable,"SO_BANCHINE")== 0)
+            SO_BANCHINE = atoi(value);
+        if(strcmp(variable,"SO_FILL ")== 0)
+            SO_FILL = atof(value);
+        if(strcmp(variable,"SO_LOADSPEED")== 0)
+            SO_LOADSPEED = atof(value);
+        if(strcmp(variable,"SO_DISTANZA")== 0)
+            SO_DISTANZA = atof(value);
+        if(strcmp(variable,"SO_NAVI")== 0){
+            SO_NAVI = atoi(value);
+            if(SO_NAVI < 1)
+                return 1;
+        }
+        if(strcmp(variable,"SO_SPEED")== 0)
+            SO_SPEED = atof(value);
+        if(strcmp(variable,"SO_CAPACITY")== 0)
+            SO_CAPACITY = atoi(value);
+        if(strcmp(variable,"SO_MERCI")== 0)
+            SO_LOADSPEED = atoi(value);
+        if(strcmp(variable,"SO_SIZE")== 0)
+            SO_SIZE = atoi(value);
+        if(strcmp(variable,"SO_MIN_VITA")== 0)
+            SO_NAVI = atoi(value);
+        if(strcmp(variable,"SO_MAX_VITA")== 0)
+            SO_SPEED = atoi(value);
+        if(strcmp(variable,"SO_LATO")== 0){
+            SO_LATO = atof(value);
+        }
+            
+
+    }
+
+	fclose(f);
+    return 0;
+}
