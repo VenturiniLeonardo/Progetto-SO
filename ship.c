@@ -9,6 +9,7 @@
 #include <time.h>
 #include <float.h> /*for double compare in arrContains*/
 #include <math.h>  /* for abs of value (double compare function)*/
+#include <signal.h>
 #include <sys/shm.h>
 #include <sys/msg.h>
 
@@ -28,7 +29,7 @@ void duck_access_unload(pid_t);
 struct coords getCoordFromPid(int);
 struct port* nearPort(pid_t,pid_t ,struct coords);
 int get_index_from_pid(pid_t);
-
+void deallocateResources();
 int getMaxExpiryDate(struct good[]);
 
 int dumpSem;
@@ -39,8 +40,27 @@ struct port *ports;
 struct ship_dump *ship_d;
 struct goods_dump* good_d;
 int time_expry_on;
+int end = 1;
+struct shmSinglePort * shmPort;
+
+/*Handler*/
+void signalHandler(int signal){
+    switch(signal){
+        case SIGALRM:
+            printf("SIGALARM\n");
+        break;
+        case SIGUSR1:
+            /*reloadExpiryDate();*/
+        break;
+        case SIGTERM:
+            deallocateResources();
+            end = 0;
+        break;
+    }
+}
 
 int main(){
+    int shm_ports;
     struct timespec tim;
     int sySem;
     int shmPort;
@@ -49,6 +69,8 @@ int main(){
     struct port* currentPort;
     struct port* prevPort;
     struct coords ship_coords;
+    struct sigaction sa;
+    sigset_t mask;
     int i = 0;
     int shm_dump_port;
     int shm_dump_ship;
@@ -57,7 +79,7 @@ int main(){
     ship_coords=generateRandCoords();
 
 
-    if((shmPort = shmget(PORT_POS_KEY,0,0666 )) == -1){
+    if((shm_ports = shmget(PORT_POS_KEY,0,0666 )) == -1){
         fprintf(stderr,"Error shared memory, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
@@ -104,6 +126,14 @@ int main(){
         exit(EXIT_FAILURE);
     }
 
+    bzero(&sa, sizeof(sa));
+    sa.sa_handler = signalHandler;
+    sigaction(SIGALRM,&sa,NULL);
+    sigaction(SIGUSR1,&sa,NULL);
+    sigaction(SIGTERM,&sa,NULL);
+
+    sigemptyset(&mask);
+
     sops.sem_num=0;
     sops.sem_op=-1;
     sops.sem_flg=0;
@@ -128,7 +158,6 @@ int main(){
     do{
         /*printf("%d:   Arrivato al porto %d dopo %ld ns\n",getpid(),currentPort->pidPort,tim.tv_nsec);*/
         nextPort = duck_access_load(currentPort->pidPort);
-        
         if(nextPort->pidPort == 0){
             nextPort = nearPort(prevPort->pidPort,currentPort->pidPort,currentPort->coord);
             /*printf("%d:  Non ho trovato nulla prossimo porto %d\n",getpid(),nextPort->pidPort);
@@ -140,7 +169,8 @@ int main(){
             prevPort = currentPort;
             currentPort = nextPort;
             if(nanosleep(&tim,NULL)<0){
-                TEST_ERROR;
+                if(end=1)
+                    TEST_ERROR;
             }
         }else{
             /*printf("%d:  Prossimo porto %d\n",getpid(),nextPort->pidPort);
@@ -150,7 +180,8 @@ int main(){
             tim.tv_nsec=(distanza-(int)distanza)*1000000000;
             
             if(nanosleep(&tim,NULL)<0){                   
-                TEST_ERROR;
+                 if(end=1)
+                    TEST_ERROR;
             }
 
             /*int(tim.tv_nsec*10^9)*/
@@ -230,9 +261,10 @@ int docking(pid_t pid_port){
 
 
         /*Semaphore Dock*/
-        if((dockSem = semget(pid_port,1,0666))==-1)
-            TEST_ERROR;
-
+        if((dockSem = semget(pid_port,1,0666))==-1){
+            if(end!=1)
+                TEST_ERROR;
+        }
         sops.sem_num=0;
         sops.sem_op=-1;
         sops.sem_flg=0;
@@ -252,9 +284,10 @@ int undocking(pid_t pid_port){
 
 
         /*Semaphore Dock*/
-        if((dockSem = semget(pid_port,1,0666)) == -1)
-            TEST_ERROR;
-
+        if((dockSem = semget(pid_port,1,0666)) == -1){
+            if(end=1)
+                TEST_ERROR;
+        }
         sops.sem_num=0;
         sops.sem_op=1;
         sops.sem_flg=0;
@@ -285,12 +318,10 @@ Output: struct port*
 Desc: returns a struct port pointer containing the next port or an empty port if it finds nothing
 */
 struct port* getSupply(pid_t pid_port){
-
         key_t supplyKey;
         int semSupply;
         int shmSupply;
         struct sembuf sops; 
-        struct shmSinglePort * shmPort;
         int i;
         int min_exipry = SO_MAX_VITA+1;
         int portSize = 0;
@@ -312,7 +343,8 @@ struct port* getSupply(pid_t pid_port){
         /*Get shm semaphore*/
         supplyKey=ftok("./port.c",pid_port);
         if((semSupply = semget(supplyKey,1,0666)) == -1){
-            TEST_ERROR;
+            if(end=1)
+                TEST_ERROR;
         }
         
         sops.sem_num=0;
@@ -323,12 +355,15 @@ struct port* getSupply(pid_t pid_port){
 
         /*Access to supply shm mstruct port[] near_ports()od*)shmat(shmSupply,NULL,0);*/
         if((shmSupply = shmget(pid_port,0,0666)) == -1){
-            TEST_ERROR;
+            if(end=1)
+                TEST_ERROR; 
         }
 
         shmPort = (struct shmSinglePort *)shmat(shmSupply,NULL,0);
-        if(shmPort == (void *) -1)
-            TEST_ERROR;
+        if(shmPort == (void *) -1){
+            if(end=1)
+                TEST_ERROR;
+        }
 
         /*printf("%d : Cerco offerta \n",getpid());*/
         /*Search for min date expiry in current port*/
@@ -352,6 +387,7 @@ struct port* getSupply(pid_t pid_port){
             sendPort->coord.x = -1;
             sendPort->coord.y = -1;
             sendPort->pidPort = 0;
+            shmdt(shmPort);
             return sendPort;
         }
 
@@ -367,8 +403,10 @@ struct port* getSupply(pid_t pid_port){
             for(i=0;i<portSize && flagGood == 0;i++){
             
                 if((msgDemand = msgget(portNear[i].pidPort,0666)) == -1){
-                    fprintf(stderr,"Error messagge queue demand in ship, %d: %s\n",errno,strerror(errno));
-                    exit(EXIT_FAILURE);
+                    if(end=1){
+                        fprintf(stderr,"Error messagge queue demand in ship, %d: %s\n",errno,strerror(errno));
+                        exit(EXIT_FAILURE);
+                    }
                 }
                 /*printf("Ricerca per domanda %d\n",getpid());*/
                 
@@ -421,7 +459,8 @@ struct port* getSupply(pid_t pid_port){
                     tim.tv_nsec= (time_nanosleep-(int)time_nanosleep)*1000000000;
                     /*Time load*/
                     if(nanosleep(&tim,NULL)<0){
-                        TEST_ERROR;
+                        if(end=1)
+                            TEST_ERROR;
                     }
                    
                     /*printf("%d:  Merce caricata %d presso il porto %d\n",getpid(),quantity,pid_port);*/
@@ -456,12 +495,14 @@ struct port* getSupply(pid_t pid_port){
         semop(semSupply,&sops,1); 
 
         if(flagGood){
+            shmdt(shmPort);
             return &portNear[i];
         }else{
             sendPort = (struct port*)malloc(sizeof(struct port));
             sendPort->coord.x = -1;
             sendPort->coord.y = -1;
             sendPort->pidPort = 0;
+            shmdt(shmPort);
             return sendPort;
         }
 
@@ -489,7 +530,6 @@ Output: struct port*
 Desc: returns an array containing the ports included in the max_distance and updates the int length
 */
 struct port* near_ports(pid_t currPort,double max_distance,int *length){
-    int shmPort;
     struct port *ports;
     struct port *port_return;
     int i;
@@ -499,13 +539,6 @@ struct port* near_ports(pid_t currPort,double max_distance,int *length){
     struct coords currCoord;
 
 
-    if((shmPort = shmget(PORT_POS_KEY,0,0666))==-1){
-        TEST_ERROR;
-    }
-
-    ports=(struct port *) shmat(shmPort,NULL,SHM_RDONLY);
-    if(ports == (void *) -1)
-        TEST_ERROR;
     port_return=malloc(sizeof(struct port));
     currCoord = (getCoordFromPid(currPort));
     for(i=0;i<SO_PORTI;i++){  
@@ -589,7 +622,8 @@ void duck_access_unload(pid_t pidPort){
     tim.tv_sec=(int)time_nanosleep;
     tim.tv_nsec= (time_nanosleep-(int)time_nanosleep)*1000000000;
     if(nanosleep(&tim,NULL)<0){
-        TEST_ERROR;
+        if(end=1)
+            TEST_ERROR;
     }
     
     sops_dump.sem_op=-1;
@@ -629,4 +663,12 @@ int get_index_from_pid(pid_t pidPort){
             return i;
     }
     return -1;
-} 
+}
+
+void deallocateResources(){
+    shmdt(port_d);
+    shmdt(ports);
+    shmdt(ship_d);
+    shmdt(good_d);
+    shmdt(shmPort);
+}

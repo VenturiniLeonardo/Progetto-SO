@@ -1,29 +1,27 @@
-/*Configuration file with all parameters*/
 
 /*GENERALS*/
-#define SO_DAYS 5 /*number of simulation days*/
-#define DAY_TIME 1 /*day duration in seconds*/
+int SO_DAYS; /*number of simulation days*/
 
 /*PORTS*/
-#define SO_PORTI 10 /*number of ports (int,>= 4)*/
-#define SO_BANCHINE 3 /*maximum number of docks (int)*/
-#define SO_FILL 1000 /*maximum goods capacity of the port*/
-#define SO_LOADSPEED 100/*loading/unloading speed of ports (ton/days)*/
-#define SO_DISTANZA 0.0001 /*minimum distance between two ports*/
+int SO_PORTI; /*number of ports (int,>= 4)*/
+int SO_BANCHINE;/*maximum number of docks (int)*/
+int SO_FILL; /*maximum goods capacity of the port*/
+int SO_LOADSPEED;/*loading/unloading speed of ports (ton/days)*/
+double SO_DISTANZA; /*minimum distance between two ports*/
 
 /*SHIPS*/
-#define SO_NAVI 5 /*number of ships (int,>=1)*/
-#define SO_SPEED 10 /*speed of ships (double or int)*/
-#define SO_CAPACITY 100/*capacity of ships (ton)*/
+int SO_NAVI; /*number of ships (int,>=1)*/
+double SO_SPEED; /*speed of ships (double or int)*/
+int SO_CAPACITY;/*capacity of ships (ton)*/
 
 /*GOODS*/
-#define SO_MERCI 5 /*type of goods (int)*/
-#define SO_SIZE 100 /*weight of goods (ton)*/
-#define SO_MIN_VITA 5 /*minimum expiry date (days)*/
-#define SO_MAX_VITA 20 /*maximum expiry date (days)*/
+int SO_MERCI; /*type of goods (int)*/
+int SO_SIZE; /*weight of goods (ton)*/
+int SO_MIN_VITA; /*minimum expiry date (days)*/
+int SO_MAX_VITA; /*maximum expiry date (days)*/
 
 /*MAP*/
-#define SO_LATO 20 /*side of the map (double)*/
+double SO_LATO; /*side of the map (double)*/
 
 /*WEATHER EVENTS*/
 #define SO_STORM_DURATION /*duration of storm (hours)*/
@@ -43,22 +41,6 @@
 #define DUMP_KEY 42
 #define SY_KEY 1
 
-/*CHECK FUNCTION*/
-#define PARAM_CHECK 
-void checkParams(){
-    if(SO_PORTI<4){
-        printf("Input error: SO_PORTI < 4\n");
-        exit(EXIT_FAILURE);
-    } 
-    if(SO_NAVI<1){
-        printf("Input error: SO_NAVI < 1\n");
-        exit(EXIT_FAILURE);
-    } 
-    if(SO_LATO<=0){
-        printf("Input error: SO_LATO cannot be negative or zero\n");
-        exit(EXIT_FAILURE);
-    } 
-}
 
 /*TEST ERROR FUNCTION*/
 #define TEST_ERROR if(errno) {fprintf(stderr, \

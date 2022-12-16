@@ -27,8 +27,12 @@ int printDump(int,struct goods_dump *,struct port_dump *,struct ship_dump *);
 void printFinalDump(int,struct goods_dump *,struct port_dump *,struct ship_dump *);
 void killAllPorts();
 void updateDateExpiry();
+void stopAllShips();
+int variableUpdate();
 
 struct port *ports; 
+pid_t ships [SO_NAVI];
+
 
 /*Master main*/
 int main(){
@@ -50,7 +54,14 @@ int main(){
     int dSem;
     struct sembuf sops; 
 
-    checkParams();
+    if(variableUpdate()){
+        printf("Error set all variable\n");
+        return 0;
+    }
+
+    printf("%d  \n",SO_DAYS);
+
+
     /*Semaphore for sync*/
     if((sySem = semget(SY_KEY,1,IPC_CREAT|IPC_EXCL|0666)) == -1){
         fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
@@ -153,7 +164,9 @@ int main(){
         }
 
     }
+
     printFinalDump(dSem,struct_goods_dump,struct_port_dump,struct_ship_dump);
+    stopAllShips();
     killAllPorts();
     deallocateResources();
 }
@@ -230,6 +243,7 @@ int portGenerator(){
         fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
+
     ports = (struct port*) shmat(shmPort,NULL,0);
     if (ports == (void *) -1){
         fprintf(stderr,"Error assing ports to shared memory, %d: %s\n",errno,strerror(errno));
@@ -285,9 +299,10 @@ Desc: returns 0 if it has generated all ships correctly, 1 otherwise
 */
 int shipGenerator(){
     int i;
-
+    pid_t sonPid;
+    
     for(i=0;i<SO_NAVI;i++){ 
-        switch(fork()){
+        switch(sonPid=fork()){
             case -1:
                 fprintf(stderr,"Error in fork , %d: %s \n",errno,strerror(errno));
                 return -1;
@@ -298,6 +313,7 @@ int shipGenerator(){
                 }
             break;
             default:
+                ships[i] = sonPid;
             break; 
         }
     }
@@ -415,12 +431,85 @@ Input: void
 Output: int
 Desc: returns 0 if deallocate all resources, -1 otherwise 
 */
+
 void killAllPorts(){
     int i;
     for(i = 0; i< SO_PORTI;i++){
         kill(ports[i].pidPort,SIGTERM);
     }
 }
+
+/*
+Input: void
+Output: int
+Desc: returns 0 if deallocate all resources, -1 otherwise 
+*/
+
+void stopAllShips(){
+    int i;
+    for(i = 0; i< SO_NAVI;i++){
+        kill(ships[i],SIGTERM);
+    }
+}
+
+/*
+Input: void
+Output: int
+Desc: returns 0 if deallocate all resources, -1 otherwise 
+*/
+
+int variableUpdate(){
+    char buffer[100];
+	char VarName[sizeof  buffer];
+	char VarValue[sizeof  buffer];
+    FILE *f;
+	f= fopen("variableFile.txt", "r");
+
+	if (fgets(buffer, sizeof buffer, f) == NULL)
+        return 1;
+	if (sscanf(buffer, "%[^\n=]=%[^\n]", VarName, VarValue) != 2) 
+		return 1;
+	else{
+        if(strcmp(VarName,"SO_DAYS"))
+            SO_DAYS = atoi(VarValue);
+        if(strcmp(VarName,"SO_PORTI"))
+            SO_PORTI = atoi(VarValue);
+        if(strcmp(VarName,"SO_BANCHINE"))
+            SO_BANCHINE = atoi(VarValue);
+        if(strcmp(VarName,"SO_FILL"))
+            SO_FILL = atoi(VarValue);
+        if(strcmp(VarName,"SO_LOADSPEED"))
+            SO_LOADSPEED = atoi(VarValue);
+        if(strcmp(VarName,"SO_DISTANZA"))
+            SO_DISTANZA = atoi(VarValue);
+        if(strcmp(VarName,"SO_NAVI"))
+            SO_NAVI = atoi(VarValue);
+        if(strcmp(VarName,"SO_SPEED"))
+            SO_SPEED = atoi(VarValue);
+        if(strcmp(VarName,"SO_CAPACITY"))
+            SO_CAPACITY = atoi(VarValue);
+        if(strcmp(VarName,"SO_MERCI"))
+            SO_LOADSPEED = atoi(VarValue);
+        if(strcmp(VarName,"SO_SIZE"))
+            SO_DISTANZA = atoi(VarValue);
+        if(strcmp(VarName,"SO_MIN_VITA"))
+            SO_NAVI = atoi(VarValue);
+        if(strcmp(VarName,"SO_MAX_VITA"))
+            SO_SPEED = atoi(VarValue);
+        if(strcmp(VarName,"SO_LATO"))
+            SO_CAPACITY = atoi(VarValue);
+
+    }
+
+	fclose(f);
+    return 0;
+}
+
+/*
+Input: void
+Output: int
+Desc: returns 0 if deallocate all resources, -1 otherwise 
+*/
 
 void updateDateExpiry(){
         int i;

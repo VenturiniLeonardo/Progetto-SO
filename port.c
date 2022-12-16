@@ -42,7 +42,7 @@ void signalHandler(int signal){
             printf("SIGALARM\n");
         break;
         case SIGUSR1:
-            reloadExpiryDate();
+            /*reloadExpiryDate();*/
         break;
         case SIGTERM:
             end = 0;
@@ -73,9 +73,11 @@ int main(int argc,char*argv[]){
     
     my_index=atoi(argv[1]);
     /*Semaphore creation docks*/
-    dockSem = semget(getpid(),1,IPC_CREAT|IPC_EXCL|0666);
-    TEST_ERROR;
-    if(semctl(dockSem,0,SETVAL,nDocks)<0){
+
+    if((dockSem = semget(getpid(),1,IPC_CREAT|IPC_EXCL|0666)) == -1){
+        TEST_ERROR;
+    }
+    if(semctl(dockSem,0,SETVAL,nDocks) == -1){
         TEST_ERROR;
     }
 
@@ -172,6 +174,7 @@ Output: int
 Desc: return random int between 1 and SO_BANCHINE
 */
 int generatorDock(){
+    srand(time(NULL));
     return (rand()%SO_BANCHINE)+1;
 }
 
@@ -202,7 +205,7 @@ int generatorSupply(){
 
 
     do{
-        srand(getpid());
+        srand(time(NULL));
         newGood.type = (rand() % SO_MERCI)+1;
         
         i++;
@@ -260,6 +263,7 @@ void reloadExpiryDate(){
     struct sembuf sops;
     struct sembuf sops_dump;
 
+
     key_semSupply=ftok("port.c",getpid());
     if((semSupply=semget(key_semSupply,1,0666)) == -1)
         TEST_ERROR;
@@ -269,9 +273,6 @@ void reloadExpiryDate(){
     sops.sem_num=0;
     sops.sem_op=-1;
     sops.sem_flg=0;
-
-    if(semop(semSupply,&sops,1) == -1)
-        TEST_ERROR;
 
     for(i=0;i<SO_MERCI;i++){
         if(shmPort->typeGoods[i][0] == 1){

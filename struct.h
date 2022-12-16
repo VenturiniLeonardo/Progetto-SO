@@ -3,7 +3,7 @@ typedef struct{
     unsigned short sem_num;
     short sem_op;
     short sem_flg;
-} sembuf;
+}sembuf;
 
 typedef struct coords{
     double x;
