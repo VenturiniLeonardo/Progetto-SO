@@ -29,7 +29,7 @@ double SO_LATO ;  /*side of the map (double)*/
 
 /*KEY SHARE MEMORY*/
 #define PORT_POS_KEY 57 /*key for shared memory contains array coords*/
-#define GOODS_DUMP_KEY 30
+#define GOODS_DUMP_KEY 31
 #define PORT_DUMP_KEY 25
 #define SHIP_DUMP_KEY 35
 
@@ -39,7 +39,6 @@ double SO_LATO ;  /*side of the map (double)*/
 /*KEY SEMAPHORE*/
 #define DUMP_KEY 42
 #define SY_KEY 1
-
 
 /*TEST ERROR FUNCTION*/
 #define TEST_ERROR if(errno) {fprintf(stderr, \

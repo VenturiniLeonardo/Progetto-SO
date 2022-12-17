@@ -4,7 +4,7 @@
 
 # Compiler settings - Can be customized.
 CC=gcc
-CFLAGS=-std=c89 -Wpedantic -D_POSIX_C_SOURCE=199309L
+CFLAGS=-std=c89 -Wpedantic -D_POSIX_C_SOURCE=199309L -D_GNU_SOURCE
 LIBS = -lm
 
 ########################################################################
