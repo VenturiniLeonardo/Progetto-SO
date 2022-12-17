@@ -140,7 +140,7 @@ int main(){
     elapsedDays=0; 
     srand(time(NULL)); 
     while(elapsedDays<SO_DAYS){
-        sleep(5);
+        sleep(1);
         /*nRandPort=rand()%SO_PORTI; 
         kill(ports[nRandPort].pidPort,SIGALRM);  
         for(i=0;i<nRandPort;i++){ 
