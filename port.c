@@ -23,7 +23,9 @@ int generatorSupply();
 void reloadExpiryDate();
 void deallocateResources();
 int variableUpdate();
-
+int blockAllDock();
+void unblockAllDock(int);
+void stop_ships();
 struct port_states* port_d;
 int mqDemand;
 int dumpSem;
@@ -34,12 +36,17 @@ int end = 1;
 struct shmSinglePort* shmPort;
 struct goods_states * good_d;
 int my_index;
+struct ship_condition * ships;
 
 /*Handler*/
 void signalHandler(int signal){
+    int semVal;
     switch(signal){
-        case SIGALRM:
-            printf("SIGALARM\n");
+        case SIGUSR2:
+            semVal = blockAllDock();;
+            stop_ships();
+            sleep(SO_SWELL_DURATION);
+            unblockAllDock(semVal);
         break;
         case SIGUSR1:
             reloadExpiryDate();
@@ -49,7 +56,6 @@ void signalHandler(int signal){
         break;
     }
 }
-
 
 /*Port Main*/
 int main(int argc,char*argv[]){
@@ -68,6 +74,7 @@ int main(int argc,char*argv[]){
     int j;
     int shm_dump_port;
     int shm_dump_goods;
+    int shmShip;
     quantityDemand = 0;
     quantitySupply = 0;
 
@@ -108,7 +115,6 @@ int main(int argc,char*argv[]){
         exit(EXIT_FAILURE);
     }
 
-
     /*Sem creation for Supply */
     key_semSupply=ftok("port.c",getpid());
     semSupply=semget(key_semSupply,1,IPC_CREAT|IPC_EXCL|0666);
@@ -128,14 +134,18 @@ int main(int argc,char*argv[]){
     shmPort = (struct shmSinglePort *)shmat(shm_offer, NULL, 0);
     if(shmPort == (void *) -1)
         TEST_ERROR;
-    
-    /*GENERATE SUPPLY AND DEMAND*/
+
+    /*shm for ships attached to a port */
+    if((shmShip = shmget(SHIP_POS_KEY,0,0666)) == -1){
+        TEST_ERROR; 
+    }
+    ships =shmat(shmShip,NULL,0);
     generatorSupply();
     generatorDemand();
         
     bzero(&sa, sizeof(sa));
     sa.sa_handler = signalHandler;
-    sigaction(SIGALRM,&sa,NULL);
+    sigaction(SIGUSR2,&sa,NULL);
     sigaction(SIGUSR1,&sa,NULL);
     sigaction(SIGTERM,&sa,NULL);
 
@@ -179,7 +189,7 @@ int generatorDock(){
 
 /*
 Input: void
-Output: int
+Output: intpid_port
 Desc: returns 0 if it generated goods, -1 if it is not possible and 1 otherwise
 */
 int generatorSupply(){
@@ -202,7 +212,6 @@ int generatorSupply(){
 
     if((semop(semSupply,&sops,1))==-1)
         TEST_ERROR;
-
  
     /*do{
         srand(time(NULL));
@@ -300,7 +309,7 @@ void reloadExpiryDate(){
 
 }
 
-/*
+/*o
 Input: void
 Output: int
 Desc: returns 0 if it generated demand, -1 if it is not possible and 1 otherwise
@@ -365,6 +374,56 @@ int generatorDemand(){
 
 }
 
+/*
+Input: void
+Output: void
+Desc: deallocate all resources
+*/
+int blockAllDock(){
+    int semDock;
+    int semVal;
+    struct sembuf sops;
+
+    if((semDock = semget    (getpid(),1,0666)) == -1){
+        TEST_ERROR;
+    }
+    if((semVal = semctl(semDock,0,GETVAL)) > 0){
+        sops.sem_num=0;
+        sops.sem_op=-semVal;
+        sops.sem_flg=0;
+        semop(semDock,&sops,1);         
+        return semVal;
+    }
+
+    return 0;
+}
+
+
+void unblockAllDock(int semVal){
+    int semDock;
+    struct sembuf sops;
+
+    if((semDock = semget(getpid(),1,0666)) == -1){
+        TEST_ERROR;
+    }
+    if(semVal != 0){
+        sops.sem_num=0;
+        sops.sem_op= semVal;
+        sops.sem_flg=0;
+        semop(semDock,&sops,1);         
+    }
+
+}
+
+void stop_ships(){
+    int i;
+    pid_t port_pid=getpid();
+    for(i=0;i<SO_NAVI;i++){
+        if(ships[i].port==port_pid){
+            kill(ships[i].ships,SIGPROF);
+        }
+    }
+}
 
 /*
 Input: void
@@ -377,6 +436,10 @@ void deallocateResources(){
     int queMes;
     int shm_offer;
     int semSupply;
+    int shm_dock;
+    
+    /*Shm ships/ports*/
+    shmdt(ships);
 
     /*Sem Docks*/
     if((semDock = semget(getpid(),1,0666)) == -1){
@@ -398,7 +461,9 @@ void deallocateResources(){
     if((shm_offer=shmget(getpid(),sizeof(struct shmSinglePort),0666) ) == -1){
         TEST_ERROR;
     }
-    /*MANCA FREE                                                   ---------------------------------------------*/
+    
+    shmdt(shmPort);
+
     if((shmctl(shm_offer,IPC_RMID,0)) == -1){
         TEST_ERROR;
     }
@@ -412,7 +477,7 @@ void deallocateResources(){
     }
     
 } 
-
+                    
 /*
 Input: void
 Output: int
@@ -464,7 +529,15 @@ int variableUpdate(){
         if(strcmp(variable,"SO_LATO")== 0){
             SO_LATO = atof(value);
         }
-            
+        if(strcmp(variable,"SO_STORM_DURATION") == 0){
+            SO_STORM_DURATION = atoi(value);
+        }
+        if(strcmp(variable,"SO_SWELL_DURATION") == 0){
+            SO_SWELL_DURATION = atoi(value);
+        }
+        if(strcmp(variable,"SO_MEALSTROM") == 0){
+            SO_MEALSTROM = atoi(value);
+        }    
 
     }
 

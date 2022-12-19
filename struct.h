@@ -55,3 +55,7 @@ typedef struct ship_dump{
     int ship_sea_no_goods;
 }struct_ship_dump;
 
+typedef struct ship_condition{
+    pid_t ship;
+    pid_t port;
+}struct_ship_condition;

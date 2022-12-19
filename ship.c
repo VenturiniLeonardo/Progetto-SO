@@ -25,8 +25,8 @@ int docking(pid_t);
 int undocking(pid_t);
 struct port* getSupply(pid_t);
 struct port* near_ports(pid_t,double,int *);
-struct port* duck_access_load(pid_t);
-void duck_access_unload(pid_t);
+struct port* dock_access_load(pid_t);
+void dock_access_unload(pid_t);
 struct coords getCoordFromPid(int);
 struct port* nearPort(pid_t,pid_t ,struct coords);
 int get_index_from_pid(pid_t);
@@ -34,22 +34,29 @@ void deallocateResources();
 int getMaxExpiryDate(struct shmSinglePort[]);
 void reloadExpiryDate();
 int variableUpdate();
+void storm_sleep();
+int getPositionByShipPid();
+void swell();
 
 
 int dumpSem;
 struct good goods_on; 
-struct port_states* port_d;
+struct shmSinglePort * shmPort;
+struct ship_condition * ships;
 struct port *ports;
+
 struct ship_dump *ship_d;
 struct goods_states* good_d;
+struct port_states* port_d;
+
 int time_expry_on;
-struct shmSinglePort * shmPort;
+
 
 /*Handler*/
 void signalHandler(int signal){
     switch(signal){
-        case SIGALRM:
-            printf("SIGALARM\n");
+        case SIGUSR2:
+            storm_sleep();
         break;
         case SIGUSR1:
             reloadExpiryDate();
@@ -57,6 +64,9 @@ void signalHandler(int signal){
         case SIGTERM:
             deallocateResources();
             exit(EXIT_SUCCESS);
+        break;
+        case SIGPROF:
+            swell();
         break;
     }
 }
@@ -79,11 +89,13 @@ int main(){
     int shm_dump_ship;
     int shm_dump_goods; 
     double distanza;
+    int shmShip;
 
     if(variableUpdate()){
         printf("Error set all variable\n");
         return 0;
     }
+
     ship_coords=generateRandCoords();
     
     if((shm_ports = shmget(PORT_POS_KEY,0,0666)) == -1){
@@ -96,6 +108,11 @@ int main(){
         exit(EXIT_FAILURE);
     }
 
+    /*shm for ships attached to a port */
+    if((shmShip = shmget(SHIP_POS_KEY,0,0666)) == -1){
+        TEST_ERROR; 
+    }
+    ships =shmat(shmShip,NULL,0);
     
     /*shm_mem for dump_port */
     if((shm_dump_port=shmget(PORT_DUMP_KEY,sizeof(struct port_states),0666))==-1)
@@ -134,11 +151,11 @@ int main(){
 
     bzero(&sa, sizeof(sa));
     sa.sa_handler = signalHandler;
-    sa.sa_flags=SA_RESTART;
-    sigaction(SIGALRM,&sa,NULL);
+    sa.sa_flags=SA_RESTART||SA_NODEFER;
+    sigaction(SIGUSR2,&sa,NULL);
     sigaction(SIGUSR1,&sa,NULL);
     sigaction(SIGTERM,&sa,NULL);
-
+    sigaction(SIGTSTP,&sa,NULL);
     sigemptyset(&mask);
 
     sops.sem_num=0;
@@ -169,7 +186,7 @@ int main(){
 
     do{
         printf("%d:   Arrivato al porto %d dopo %ld ns\n",getpid(),currentPort->pidPort,req.tv_nsec);
-        nextPort = duck_access_load(currentPort->pidPort);
+        nextPort = dock_access_load(currentPort->pidPort);
         if(nextPort->pidPort == 0){
             nextPort = nearPort(prevPort->pidPort,currentPort->pidPort,currentPort->coord);
             printf("%d:  Non ho trovato nulla prossimo porto %d\n",getpid(),nextPort->pidPort);
@@ -207,10 +224,11 @@ int main(){
             prevPort = currentPort;
             currentPort =nextPort;
             if(goods_on.date_expiry>0)
-                duck_access_unload(currentPort->pidPort);
+                dock_access_unload(currentPort->pidPort);
             }
-        i++;
-    }while(i<SO_DAYS);
+    }while(1);
+
+    return 0;
 
 }
 
@@ -276,7 +294,7 @@ Desc: return 0 if the docking has gone abuon end
 int docking(pid_t pid_port){
         int dockSem;
         struct sembuf sops; 
-
+        
 
         /*Semaphore Dock*/
         if((dockSem = semget(pid_port,1,0666))==-1){
@@ -286,6 +304,8 @@ int docking(pid_t pid_port){
         sops.sem_op=-1;
         sops.sem_flg=0;
         semop(dockSem,&sops,1);
+
+        ships[getPositionByShipPid()].port = pid_port;
 
 
         return 0;
@@ -299,6 +319,8 @@ Desc: returns 0 if the uncoupling has gone to an end
 int undocking(pid_t pid_port){
         int dockSem;
         struct sembuf sops; 
+
+        /*Deleting pid from Port shm */
 
 
         /*Semaphore Dock*/
@@ -571,6 +593,7 @@ struct port* near_ports(pid_t currPort,double max_distance,int *length){
 
     return port_return;  
 }        
+      
     
 
 /*
@@ -578,7 +601,7 @@ Input: pid_t
 Output: struct port*
 Desc: returns a struct port pointer containing the next port or an empty port if it finds nothing - operations docking and undocking
 */
-struct port* duck_access_load(pid_t pid_port){
+struct port* dock_access_load(pid_t pid_port){
     struct port* ports;
     int dockSem;
     struct sembuf sops; 
@@ -627,11 +650,11 @@ struct port* duck_access_load(pid_t pid_port){
 }
 
 /*
-Input: pid_t
+Input: pid_ta: ogni giorno colpisce casualmente
 Output: void
 Desc: allows access to the loading dock
 */
-void duck_access_unload(pid_t pidPort){
+void dock_access_unload(pid_t pidPort){
     struct timespec req;
     struct timespec rem;
     struct sembuf sops_dump;
@@ -683,6 +706,11 @@ void duck_access_unload(pid_t pidPort){
     
 }
 
+/*
+Input: pid_ta: ogni giorno colpisce casualmente
+Output: void
+Desc: allows access to the loading dock
+*/
 int get_index_from_pid(pid_t pidPort){
     int i;
     for(i=0;i<SO_PORTI;i++){
@@ -692,14 +720,85 @@ int get_index_from_pid(pid_t pidPort){
     return -1;
 }
 
+/*
+Input: pid_ta: ogni giorno colpisce casualmente
+Output: void
+Desc: allows access to the loading dock
+*/
+int getPositionByShipPid(){
+    int i;
+    for(i = 0; i<SO_NAVI;i++)
+        if(ships[i].ship == getpid())
+            return i;
+
+    return -1;   
+}
+
+/*
+Input: pid_ta: ogni giorno colpisce casualmente
+Output: void
+Desc: allows access to the loading dock
+*/
+void storm_sleep(){
+    struct timespec req;
+    struct timespec rem;
+    double time_storm=SO_STORM_DURATION/24;
+    rem.tv_sec=0;
+    rem.tv_nsec=0;
+    req.tv_sec=(int)time_storm;
+    req.tv_nsec=(time_storm-(int)time_storm)*1000000000;
+    while(nanosleep(&req,&rem)<0){
+        if(errno!=EINTR){
+            TEST_ERROR;
+        }else{
+            req.tv_sec=rem.tv_sec;
+            req.tv_nsec=rem.tv_nsec;
+        }
+    }
+}
+
+
+/*
+Input: pid_ta: ogni giorno colpisce casualmente
+Output: void
+Desc: allows access to the loading dock
+*/
+void swell(){
+    struct timespec req;
+    struct timespec rem;
+    double time_swell=SO_SWELL_DURATION/24;
+    rem.tv_sec=0;
+    rem.tv_nsec=0;
+    req.tv_sec=(int)time_swell;
+    req.tv_nsec=(time_swell-(int)time_swell)*1000000000;
+    while(nanosleep(&req,&rem)<0){
+        if(errno!=EINTR){
+            TEST_ERROR;
+        }else{
+            req.tv_sec=rem.tv_sec;
+            req.tv_nsec=rem.tv_nsec;
+        }
+    }
+}
+/*
+Input: pid_ta: ogni giorno colpisce casualmente
+Output: void
+Desc: allows access to the loading dock
+*/
 void deallocateResources(){
     shmdt(port_d);
     shmdt(ports);
     shmdt(ship_d);
     shmdt(good_d);
     shmdt(shmPort);
+    shmdt(ships);
 }
 
+/*
+Input: pid_ta: ogni giorno colpisce casualmente
+Output: void
+Desc: allows access to the loading dock
+*/
 void reloadExpiryDate(){
     goods_on.date_expiry-=1;
 }
@@ -757,7 +856,15 @@ int variableUpdate(){
         if(strcmp(variable,"SO_LATO")== 0){
             SO_LATO = atof(value);
         }
-            
+        if(strcmp(variable,"SO_STORM_DURATION") == 0){
+            SO_STORM_DURATION = atoi(value);
+        }
+        if(strcmp(variable,"SO_SWELL_DURATION") == 0){
+            SO_SWELL_DURATION = atoi(value);
+        }
+        if(strcmp(variable,"SO_MEALSTROM") == 0){
+            SO_MEALSTROM = atoi(value);
+        }    
 
     }
 

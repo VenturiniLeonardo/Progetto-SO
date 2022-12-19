@@ -1,3 +1,4 @@
+
 /*System libraries*/
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,9 +19,9 @@
 
 /*Function declaration*/
 int arrContains(struct port[],struct coords,int );
-int portGenerator();
-int shipGenerator();
-int arrContains(struct port [],struct coords ,int );
+void portGenerator();
+void shipGenerator();
+void weatherGenerator();
 int deallocateResources();
 int genRandInt(int,int);
 int printDump(int,struct goods_states *,struct port_states *,struct ship_dump *);
@@ -29,9 +30,12 @@ void killAllPorts();
 void updateDateExpiry();
 void stopAllShips();
 int variableUpdate();
+void stopWeather();
+
 
 struct port *ports;
-pid_t * ships;
+struct ship_condition * ships;
+pid_t weatherPid;
 
 /*Master main*/
 int main(){
@@ -51,20 +55,27 @@ int main(){
     int RandPort;
     int i;
     int dSem;
+    int shmShip;
     struct sembuf sops; 
 
     if(variableUpdate()){
         printf("Error set all variable\n");
         return 0;
     }
-    ships = (pid_t *)malloc(sizeof(pid_t) * SO_NAVI);
+
+    /*Shared Memory for ships*/
+    if((shmShip = shmget(SHIP_POS_KEY,sizeof(struct ship_condition)*SO_NAVI,IPC_CREAT|IPC_EXCL|0666 )) == -1){
+        fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
     /*Semaphore for sync*/
     if((sySem = semget(SY_KEY,1,IPC_CREAT|IPC_EXCL|0666)) == -1){
         fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
 
-    if(semctl(sySem,0,SETVAL,SO_NAVI+SO_PORTI+1)<0){
+    if(semctl(sySem,0,SETVAL,SO_NAVI+SO_PORTI+2)<0){
         fprintf(stderr,"Error initializing semaphore, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
@@ -124,6 +135,7 @@ int main(){
 
     portGenerator();
     shipGenerator();
+    weatherGenerator();
     /*Semaphore creation docks*/
 
     sops.sem_num=0;
@@ -146,7 +158,7 @@ int main(){
         for(i=0;i<nRandPort;i++){ 
             RandPort=rand()%SO_PORTI;
             kill(ports[RandPort].pidPort,SIGALRM);
-            
+            +
         }*/
         printf("Day %d\n",elapsedDays+1);
         updateDateExpiry();
@@ -154,15 +166,21 @@ int main(){
             printf("Offerta o richiesta pari a zero.... Terminazione\n");
             elapsedDays = SO_DAYS;
         }else{
-            elapsedDays++;
+            elapsedDays++;  
         }
-
     }
 
     printFinalDump(dSem,struct_goods_dump,struct_port_dump,struct_ship_dump);
+    
+    stopWeather();
     stopAllShips();
+
+    /*Kill all process*/
     killAllPorts();
+    kill(weatherPid,SIGTERM);
     deallocateResources();
+
+    return 0;
 }
 
 /*Functions definitions*/
@@ -221,7 +239,7 @@ Input: void
 Output: int
 Desc: returns 0 if it has generated all ports correctly, -1 otherwise
 */
-int portGenerator(){
+void portGenerator(){
 
     struct coords myC;
     int i;
@@ -264,11 +282,11 @@ int portGenerator(){
         switch (sonPid = fork()){
             case -1:
                 fprintf(stderr,"Error in fork, %d: %s",errno,strerror(errno));
-                return -1;
+                exit(EXIT_FAILURE);
             case 0:
                 if(execlp("./port","./port",index_port,NULL) == -1){
                     fprintf(stderr,"Error in execlp port numer %d, %d: %s",i,errno,strerror(errno));
-                    return -1;
+                    exit(EXIT_FAILURE);
                 }
             break;
             default:
@@ -277,7 +295,6 @@ int portGenerator(){
             break;
         }
     }
-    return 0;
 }
 
 /*
@@ -285,29 +302,59 @@ Input: void
 Output: int
 Desc: returns 0 if it has generated all ships correctly, 1 otherwise
 */
-int shipGenerator(){
+void shipGenerator(){
     int i;
+    int shmShip;
     pid_t sonPid;
+    
+    if((shmShip = shmget(SHIP_POS_KEY,0,0666 )) == -1){
+        fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    ships = (struct ship_condition *) shmat(shmShip,NULL,0);
+    
+    if (ships == (void *) -1){
+        fprintf(stderr,"Error assing ships to shared memory, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
     
     for(i=0;i<SO_NAVI;i++){ 
         switch(sonPid=fork()){
             case -1:
                 fprintf(stderr,"Error in fork , %d: %s \n",errno,strerror(errno));
-                return -1;
+                exit(EXIT_FAILURE);
             case 0: 
                 if(execlp("./ship","./ship",NULL) == -1){
                     fprintf(stderr,"Error in execl ship num %d, %d: %s \n",i,errno,strerror(errno));
-                    return -1; 
+                    exit(EXIT_FAILURE); 
                 }
             break;
             default:
-                ships[i] = sonPid;
+                ships[i].ship = sonPid;
+                ships[i].port = 0;
             break; 
         }
     }
-    return 0;
 }
 
+void weatherGenerator(){
+    int sonPid;
+    switch (sonPid=fork()){
+    case -1:
+        fprintf(stderr,"Error in fork , %d: %s \n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    case 0: 
+        if(execlp("./weather","./weather",NULL) == -1){
+            fprintf(stderr,"Error in execl ship num, %d: %s \n",errno,strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+        break;
+    default:
+        weatherPid = sonPid;
+        break;
+    }
+}
 
 /*
 Input: void
@@ -437,10 +484,13 @@ Desc: returns 0 if deallocate all resources, -1 otherwise
 void stopAllShips(){
     int i;
     for(i = 0; i< SO_NAVI;i++){
-        kill(ships[i],SIGTERM);
+        kill(ships[i].ship,SIGTERM);
     }
 }
 
+void stopWeather(){
+    kill(weatherPid,SIGTERM);
+}
 /*
 Input: void
 Output: int
@@ -493,12 +543,20 @@ int variableUpdate(){
         if(strcmp(variable,"SO_LATO")== 0){
             SO_LATO = atof(value);
         }
-            
+        if(strcmp(variable,"SO_STORM_DURATION") == 0){
+            SO_STORM_DURATION = atoi(value);
+        }
+        if(strcmp(variable,"SO_SWELL_DURATION") == 0){
+            SO_SWELL_DURATION = atoi(value);
+        }
+        if(strcmp(variable,"SO_MEALSTROM") == 0){
+            SO_MEALSTROM = atoi(value);
+        }    
 
     }
 
 	fclose(f);
-    return 0;    
+    return 0;
 }
 
 /*
@@ -514,7 +572,7 @@ void updateDateExpiry(){
     }
 
     for(i = 0;i<SO_NAVI;i++){
-        kill(ships[i],SIGUSR1);
+        kill(ships[i].ship,SIGUSR1);
     }
 }
 
@@ -527,6 +585,7 @@ int deallocateResources(){
 
     int sySem;
     int shmPort;
+    int shmShip;
     int dSem;
     int shm_dump_goods;
     int shm_dump_port;
@@ -534,8 +593,6 @@ int deallocateResources(){
     struct port_states * struct_port_dump;
     struct ship_dump *struct_ship_dump;
     struct goods_states *struct_goods_dump;
-
-    free(ships);
 
     /*Sy SEMAPHORE */
 
@@ -546,6 +603,18 @@ int deallocateResources(){
         TEST_ERROR;
     }
 
+    /*SHARED MEMORY Ships*/
+
+    if((shmShip = shmget(SHIP_POS_KEY,0,0666 )) == -1){
+        TEST_ERROR;
+    }
+    
+    if(shmdt(ships) == -1)
+        TEST_ERROR;
+    
+    if((shmShip = shmctl(shmShip,IPC_RMID,NULL)) == -1){
+        TEST_ERROR;
+    }
 
     /*SHARED MEMORY Ports*/
 

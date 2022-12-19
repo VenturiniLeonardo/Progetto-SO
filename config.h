@@ -23,12 +23,13 @@ int SO_MAX_VITA ; /*maximum expiry date (days)*/
 double SO_LATO ;  /*side of the map (double)*/
 
 /*WEATHER EVENTS*/
-#define SO_STORM_DURATION /*duration of storm (hours)*/
-#define SO_SWELL_DURATION 2 /*duration of swell (hours)*/
-#define SO_MEALSTROM /*mealstrom repeat (hours)*/
+int SO_STORM_DURATION ;/*duration of storm (hours)*/
+int SO_SWELL_DURATION ;/*duration of swell (hours)*/
+int SO_MEALSTROM ;/*mealstrom repeat (hours)*/
 
 /*KEY SHARE MEMORY*/
 #define PORT_POS_KEY 57 /*key for shared memory contains array coords*/
+#define SHIP_POS_KEY 13
 #define GOODS_DUMP_KEY 31
 #define PORT_DUMP_KEY 25
 #define SHIP_DUMP_KEY 35
