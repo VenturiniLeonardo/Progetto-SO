@@ -26,6 +26,8 @@ int variableUpdate();
 int blockAllDock();
 void unblockAllDock(int);
 void stop_ships();
+void swell();
+
 struct port_states* port_d;
 int mqDemand;
 int dumpSem;
@@ -38,15 +40,12 @@ struct goods_states * good_d;
 int my_index;
 struct ship_condition * ships;
 
+
 /*Handler*/
 void signalHandler(int signal){
-    int semVal;
     switch(signal){
         case SIGUSR2:
-            semVal = blockAllDock();;
-            stop_ships();
-            sleep(SO_SWELL_DURATION);
-            unblockAllDock(semVal);
+            swell();
         break;
         case SIGUSR1:
             reloadExpiryDate();
@@ -384,7 +383,7 @@ int blockAllDock(){
     int semVal;
     struct sembuf sops;
 
-    if((semDock = semget    (getpid(),1,0666)) == -1){
+    if((semDock = semget(getpid(),1,0666)) == -1){
         TEST_ERROR;
     }
     if((semVal = semctl(semDock,0,GETVAL)) > 0){
@@ -398,6 +397,11 @@ int blockAllDock(){
     return 0;
 }
 
+/*
+Input: void
+Output: void
+Desc: deallocate all resources
+*/
 
 void unblockAllDock(int semVal){
     int semDock;
@@ -415,14 +419,48 @@ void unblockAllDock(int semVal){
 
 }
 
+/*
+Input: void
+Output: void
+Desc: deallocate all resources
+*/
+
 void stop_ships(){
     int i;
     pid_t port_pid=getpid();
     for(i=0;i<SO_NAVI;i++){
         if(ships[i].port==port_pid){
-            kill(ships[i].ships,SIGPROF);
+            kill(ships[i].ship,SIGPROF);
         }
     }
+}
+
+/*
+Input: void
+Output: void
+Desc: deallocate all resources
+*/
+
+void swell(){
+    int semVal = blockAllDock();
+    struct timespec req;
+    struct timespec rem;
+    double time_swell=SO_SWELL_DURATION/24;
+    stop_ships();
+    printf("Porto %d bloccato\n",getpid());
+    rem.tv_sec=0;
+    rem.tv_nsec=0;
+    req.tv_sec=(int)time_swell;
+    req.tv_nsec=(time_swell-(int)time_swell)*1000000000;
+    while(nanosleep(&req,&rem)<0){
+        if(errno!=EINTR){
+            TEST_ERROR;
+        }else{
+            req.tv_sec=rem.tv_sec;
+            req.tv_nsec=rem.tv_nsec;
+        }
+    }
+    unblockAllDock(semVal);
 }
 
 /*
@@ -535,8 +573,8 @@ int variableUpdate(){
         if(strcmp(variable,"SO_SWELL_DURATION") == 0){
             SO_SWELL_DURATION = atoi(value);
         }
-        if(strcmp(variable,"SO_MEALSTROM") == 0){
-            SO_MEALSTROM = atoi(value);
+        if(strcmp(variable,"SO_MAELSTROM") == 0){
+            SO_MAELSTROM = atoi(value);
         }    
 
     }

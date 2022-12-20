@@ -25,7 +25,7 @@ double SO_LATO ;  /*side of the map (double)*/
 /*WEATHER EVENTS*/
 int SO_STORM_DURATION ;/*duration of storm (hours)*/
 int SO_SWELL_DURATION ;/*duration of swell (hours)*/
-int SO_MEALSTROM ;/*mealstrom repeat (hours)*/
+int SO_MAELSTROM ;/*mealstrom repeat (hours)*/
 
 /*KEY SHARE MEMORY*/
 #define PORT_POS_KEY 57 /*key for shared memory contains array coords*/

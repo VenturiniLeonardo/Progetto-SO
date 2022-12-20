@@ -68,7 +68,7 @@ int main(){
         fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
-
+    
     /*Semaphore for sync*/
     if((sySem = semget(SY_KEY,1,IPC_CREAT|IPC_EXCL|0666)) == -1){
         fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
@@ -151,6 +151,7 @@ int main(){
     /*elapsed days*/
     elapsedDays=0; 
     srand(time(NULL)); 
+    printf("\n%d\n",weatherPid);
     while(elapsedDays<SO_DAYS){
         sleep(1);
         /*nRandPort=rand()%SO_PORTI; 
@@ -160,14 +161,16 @@ int main(){
             kill(ports[RandPort].pidPort,SIGALRM);
             +
         }*/
+        kill(weatherPid,SIGUSR1);
         printf("Day %d\n",elapsedDays+1);
         updateDateExpiry();
-        if(printDump(dSem,struct_goods_dump,struct_port_dump,struct_ship_dump)){
+        /*if(printDump(dSem,struct_goods_dump,struct_port_dump,struct_ship_dump)){
             printf("Offerta o richiesta pari a zero.... Terminazione\n");
             elapsedDays = SO_DAYS;
         }else{
             elapsedDays++;  
-        }
+        }*/
+        elapsedDays++;
     }
 
     printFinalDump(dSem,struct_goods_dump,struct_port_dump,struct_ship_dump);
@@ -549,8 +552,8 @@ int variableUpdate(){
         if(strcmp(variable,"SO_SWELL_DURATION") == 0){
             SO_SWELL_DURATION = atoi(value);
         }
-        if(strcmp(variable,"SO_MEALSTROM") == 0){
-            SO_MEALSTROM = atoi(value);
+        if(strcmp(variable,"SO_MAELSTROM") == 0){
+            SO_MAELSTROM = atoi(value);
         }    
 
     }

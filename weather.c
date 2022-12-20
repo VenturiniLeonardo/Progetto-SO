@@ -20,19 +20,20 @@
 int variableUpdate();
 void storm();
 void swell();
+void maelstrom();
 void deallocateResources();
+pid_t * ships_in_sea(int*);
 
 struct port *ports;
 struct ship_condition * ships;
-
+pid_t * ship_in_sea;
 /*Handler*/
 void signalHandler(int signal){
     switch(signal){
-        case SIGUSR2:
-            
-        break;
         case SIGUSR1:
             
+            swell();
+            storm();
         break;
         case SIGTERM:
             deallocateResources();
@@ -48,6 +49,9 @@ int main(){
     struct sembuf sops; 
     struct sigaction sa;
     sigset_t mask;
+    struct timespec req;
+    struct timespec rem;
+    double time_in_sec;
 
     if(variableUpdate()){
         printf("Error set all variable\n");
@@ -65,6 +69,19 @@ int main(){
         fprintf(stderr,"Error assing ports to shared memory, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
+
+    /*SHM Ship*/
+    if((shmShip = shmget(SHIP_POS_KEY,0,0666)) == -1){
+        fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    ships = (struct ship_condition *) shmat(shmShip,NULL,0);
+    
+    if (ships == (void *) -1){
+        fprintf(stderr,"Error assing ships to shared memory, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
     
     /*SHM ships*/
     if((shmShip = shmget(SHIP_POS_KEY,0,0666 )) == -1){
@@ -77,6 +94,14 @@ int main(){
         exit(EXIT_FAILURE);
     }
 
+    bzero(&sa, sizeof(sa));
+    sa.sa_handler = signalHandler;
+    sa.sa_flags=SA_RESTART||SA_NODEFER;
+    sigaction(SIGUSR2,&sa,NULL);
+    sigaction(SIGTERM,&sa,NULL);
+
+    sigemptyset(&mask);
+
     sops.sem_num=0;
     sops.sem_op=-1;
     sops.sem_flg=0;
@@ -84,23 +109,53 @@ int main(){
 
     sops.sem_op=0;
     semop(sySem,&sops,1);
-
-    bzero(&sa, sizeof(sa));
-    sa.sa_handler = signalHandler;
-    sa.sa_flags=SA_RESTART||SA_NODEFER;
-    sigaction(SIGUSR2,&sa,NULL);
-    sigaction(SIGUSR1,&sa,NULL);
-    sigaction(SIGTERM,&sa,NULL);
-
-    sigemptyset(&mask);
-
-
-
-
+    time_in_sec=SO_MAELSTROM/24;
+    rem.tv_sec=0;
+    rem.tv_nsec=0;
+    
+    do{
+        req.tv_sec=(int) time_in_sec;
+        req.tv_nsec=(time_in_sec-(int)time_in_sec)*1000000000;
+        while(nanosleep(&req,&rem)<0){
+            if(errno!=EINTR){
+                TEST_ERROR;
+            }else{
+                req.tv_sec=rem.tv_sec;
+                req.tv_nsec=rem.tv_nsec;
+            }
+        }
+        
+        maelstrom();      
+    }while(1);
+   
     return 0;
 }
 /*Functions definitions*/
 
+/*
+Input: void
+Output: int
+Desc:
+*/
+pid_t * ships_in_sea(int* length){
+    int i;
+    pid_t *ships_sea;
+    int j = 0;
+
+    ships_sea=malloc(sizeof(pid_t));
+
+    for(i=0;i<SO_NAVI;i++){
+        if(ships[i].ship != 0 && ships[i].port == 0){
+            ships_sea[j] = ships[i].ship;
+            ships_sea=realloc(ships_sea,sizeof(pid_t));
+            j++;
+        }
+    }
+
+    *length = j;
+    return ships_sea;  
+    
+}
 
 
 /*
@@ -112,18 +167,50 @@ void swell(){
     int posPort;
     srand(time(NULL));
     posPort = rand()%SO_PORTI;
-    kill(ports[posPort].pidPort,SIGUSR2);
-    
+    printf("Swell pid: %d\n",ports[posPort].pidPort);
+    kill(ports[posPort].pidPort,SIGUSR2);    
 }
 
-
+/*
+Input: void
+Output: int
+Desc:
+*/
 void storm(){
     int index;
-    srand(time(NULL));
-    do{
-        index=rand()%SO_NAVI;
-    }while(ships[index].port!=0);
-    kill(ships[index].ship,SIGUSR2);
+    int length = 0;
+    pid_t *ships_sea = ships_in_sea(&length);
+    printf("%d\n",length);
+    if(length != 0){
+        srand(time(NULL));
+        index=rand()%length;
+        printf("Storm pid: %d\n",ships_sea[index]);
+        kill(ships_sea[index],SIGUSR2);
+    }
+    free(ships_sea);
+}
+
+/*
+Input: void
+Output: int
+Desc:
+*/
+void maelstrom(){
+    int randShip;
+    int length = 0;
+    pid_t *ships_sea = ships_in_sea(&length);
+    
+    if(length != 0){
+        length += 1;
+        srand(time(NULL));
+        randShip=rand()%length;
+        printf("a : %d\n",randShip); 
+        printf("Maelstrom pid: %d\n",ships_sea[randShip]);
+        
+        kill(ships_sea[randShip],SIGALRM);
+    }
+
+    free(ships_sea);
 }
 
 /*
@@ -131,7 +218,6 @@ Input: void
 Output: int
 Desc: returns 0 if deallocate all resources, -1 otherwise 
 */
-
 int variableUpdate(){
     char buffer[256];
 	char *variable;
@@ -184,8 +270,8 @@ int variableUpdate(){
         if(strcmp(variable,"SO_SWELL_DURATION") == 0){
             SO_SWELL_DURATION = atoi(value);
         }
-        if(strcmp(variable,"SO_MEALSTROM") == 0){
-            SO_MEALSTROM = atoi(value);
+        if(strcmp(variable,"SO_MAELSTROM") == 0){
+            SO_MAELSTROM = atoi(value);
         }    
 
     }

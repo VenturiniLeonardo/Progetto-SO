@@ -36,6 +36,7 @@ void reloadExpiryDate();
 int variableUpdate();
 void storm_sleep();
 int getPositionByShipPid();
+void restoreDemand();
 void swell();
 
 
@@ -44,6 +45,7 @@ struct good goods_on;
 struct shmSinglePort * shmPort;
 struct ship_condition * ships;
 struct port *ports;
+pid_t demandPort;
 
 struct ship_dump *ship_d;
 struct goods_states* good_d;
@@ -54,6 +56,7 @@ int time_expry_on;
 
 /*Handler*/
 void signalHandler(int signal){
+
     switch(signal){
         case SIGUSR2:
             storm_sleep();
@@ -61,13 +64,21 @@ void signalHandler(int signal){
         case SIGUSR1:
             reloadExpiryDate();
         break;
+        case SIGPROF:
+            swell();
+        break;
+        case SIGALRM:
+            ships[getPositionByShipPid()].ship = 0;
+            ships[getPositionByShipPid()].port = 0;
+            restoreDemand();
+            deallocateResources();
+            exit(EXIT_SUCCESS);
+        break;
         case SIGTERM:
             deallocateResources();
             exit(EXIT_SUCCESS);
         break;
-        case SIGPROF:
-            swell();
-        break;
+
     }
 }
 
@@ -155,7 +166,8 @@ int main(){
     sigaction(SIGUSR2,&sa,NULL);
     sigaction(SIGUSR1,&sa,NULL);
     sigaction(SIGTERM,&sa,NULL);
-    sigaction(SIGTSTP,&sa,NULL);
+    sigaction(SIGPROF,&sa,NULL);
+    sigaction(SIGALRM,&sa,NULL);
     sigemptyset(&mask);
 
     sops.sem_num=0;
@@ -535,12 +547,14 @@ struct port* getSupply(pid_t pid_port){
 
         if(flagGood){
             shmdt(shmPort);
+            demandPort = portNear[i].pidPort;
             return &portNear[i];
         }else{
             sendPort = (struct port*)malloc(sizeof(struct port));
             sendPort->coord.x = -1;
             sendPort->coord.y = -1;
             sendPort->pidPort = 0;
+            demandPort = 0;
             shmdt(shmPort);
             return sendPort;
         }
@@ -771,6 +785,7 @@ void swell(){
     rem.tv_nsec=0;
     req.tv_sec=(int)time_swell;
     req.tv_nsec=(time_swell-(int)time_swell)*1000000000;
+    printf("Rallentata nave %d",getpid());
     while(nanosleep(&req,&rem)<0){
         if(errno!=EINTR){
             TEST_ERROR;
@@ -780,6 +795,46 @@ void swell(){
         }
     }
 }
+
+/*
+Input: pid_ta: ogni giorno colpisce casualmente
+Output: void
+Desc: allows access to the loading dock
+*/
+void restoreDemand(){
+    int idMsgDemand;
+    struct msgDemand goods_lost;
+    struct sembuf sops_dump;
+    if(demandPort != 0){
+        if((idMsgDemand = msgget(demandPort,0666)) == -1){
+            fprintf(stderr,"Error messagge queue demand in ship, %d: %s\n",errno,strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+        goods_lost.quantity = goods_on.quantity;
+        goods_lost.type = goods_on.type;
+        if(msgsnd(idMsgDemand,&goods_lost,sizeof(int),IPC_NOWAIT) == -1){
+            fprintf(stderr,"Error send messagge queue demand , %d: %s\n",errno,strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+
+        sops_dump.sem_op=-1;
+        semop(dumpSem,&sops_dump,1);
+        /*Dump ships*/  
+        ship_d->ship_sea_goods -= 1;
+        /*Dump good*/  
+        good_d[goods_on.type-1].goods_on_ship -= goods_on.quantity;
+        sops_dump.sem_op=1;
+        semop(dumpSem,&sops_dump,1);
+        printf("Affondata nave %d con carico\n",getpid());
+
+    }else{
+        sops_dump.sem_op=-1;
+        semop(dumpSem,&sops_dump,1);
+        /*Dump ships*/  
+        ship_d->ship_sea_no_goods -= 1;
+    }
+}
+
 /*
 Input: pid_ta: ogni giorno colpisce casualmente
 Output: void
@@ -794,9 +849,7 @@ void deallocateResources(){
     shmdt(ships);
 }
 
-/*
-Input: pid_ta: ogni giorno colpisce casualmente
-Output: void
+/*SIGALRM
 Desc: allows access to the loading dock
 */
 void reloadExpiryDate(){
@@ -862,8 +915,8 @@ int variableUpdate(){
         if(strcmp(variable,"SO_SWELL_DURATION") == 0){
             SO_SWELL_DURATION = atoi(value);
         }
-        if(strcmp(variable,"SO_MEALSTROM") == 0){
-            SO_MEALSTROM = atoi(value);
+        if(strcmp(variable,"SO_MAELSTROM") == 0){
+            SO_MAELSTROM = atoi(value);
         }    
 
     }
