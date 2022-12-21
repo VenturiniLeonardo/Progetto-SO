@@ -27,11 +27,12 @@ int blockAllDock();
 void unblockAllDock(int);
 void stop_ships();
 void swell();
+void generatorDailySupply();
 
 struct port_states* port_d;
 int mqDemand;
 int dumpSem;
-/*struct good offers[SO_MERCI];*/
+/*struct good offers[SO_MERCI];*/   
 int quantityDemand;
 int quantitySupply;
 int end = 1;
@@ -39,7 +40,7 @@ struct shmSinglePort* shmPort;
 struct goods_states * good_d;
 int my_index;
 struct ship_condition * ships;
-
+int msg_generator_supply;
 
 /*Handler*/
 void signalHandler(int signal){
@@ -49,6 +50,9 @@ void signalHandler(int signal){
         break;
         case SIGUSR1:
             reloadExpiryDate();
+        break;
+        case SIGALRM:
+            generatorDailySupply();
         break;
         case SIGTERM:
             end = 0;
@@ -88,6 +92,7 @@ int main(int argc,char*argv[]){
     if((dockSem = semget(getpid(),1,IPC_CREAT|IPC_EXCL|0666)) == -1){
         TEST_ERROR;
     }
+
     if(semctl(dockSem,0,SETVAL,nDocks) == -1){
         TEST_ERROR;
     }
@@ -95,19 +100,19 @@ int main(int argc,char*argv[]){
     /*Dump */
     if((shm_dump_port=shmget(PORT_DUMP_KEY,sizeof(struct port_states),0666))==-1)
         TEST_ERROR;
+
     port_d=(struct port_states*)shmat(shm_dump_port,NULL,0);
 
     port_d[my_index].dock_total = nDocks;
+    port_d[my_index].swell = 0;
     /*Dump  for goods*/
     if((shm_dump_goods = shmget(GOODS_DUMP_KEY,sizeof(struct goods_states),0666 )) == -1){
-        fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
+        fprintf(stderr,"Error shared memory good dump creation in port, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
     good_d=(struct goods_states*) shmat(shm_dump_goods,NULL,0);
-    
     TEST_ERROR;
    
-
     /*Sem for dump*/
     if((dumpSem = semget(DUMP_KEY,1,0666)) == -1){
         fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
@@ -119,10 +124,11 @@ int main(int argc,char*argv[]){
     semSupply=semget(key_semSupply,1,IPC_CREAT|IPC_EXCL|0666);
     if(semctl(semSupply,0,SETVAL,1)==-1){
         TEST_ERROR;
+        printf("error on shm for Supply line 127");
     }
 
     /*MESSAGGE QUEUE FOR DEMAND*/
-    if((mqDemand = msgget(getpid(),IPC_CREAT | 0666)) == -1){
+    if((mqDemand = msgget(getpid(),IPC_CREAT | IPC_EXCL |0666)) == -1){
         fprintf(stderr,"Error initializing messagge queue for demand, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
@@ -131,19 +137,32 @@ int main(int argc,char*argv[]){
     if((shm_offer=shmget(getpid(),sizeof(struct shmSinglePort)*SO_MERCI, IPC_CREAT | IPC_EXCL | 0666)) == -1)
         TEST_ERROR;  
     shmPort = (struct shmSinglePort *)shmat(shm_offer, NULL, 0);
-    if(shmPort == (void *) -1)
+    if(shmPort == (void *) -1){
         TEST_ERROR;
+        printf("error on shm for offer line 141");
+    }
 
     /*shm for ships attached to a port */
     if((shmShip = shmget(SHIP_POS_KEY,0,0666)) == -1){
-        TEST_ERROR; 
+        TEST_ERROR;
+        printf("error on shm for ships attached to a port line 145");
     }
     ships =shmat(shmShip,NULL,0);
+
+    /*MSG queue for generator daily supply */
+    if((msg_generator_supply = msgget(getppid(),0666)) == -1){
+        fprintf(stderr,"Error initializing messagge queue for demand, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+
+
     generatorSupply();
     generatorDemand();
         
     bzero(&sa, sizeof(sa));
     sa.sa_handler = signalHandler;
+    sa.sa_flags=SA_NODEFER;
     sigaction(SIGUSR2,&sa,NULL);
     sigaction(SIGUSR1,&sa,NULL);
     sigaction(SIGTERM,&sa,NULL);
@@ -175,6 +194,39 @@ int main(int argc,char*argv[]){
 
 
 /*Functions definitions*/
+
+/*
+Input: void
+Output: int
+Desc: return random int between 1 and SO_BANCHINE
+*/
+void generatorDailySupply(){
+    struct msgSupply msg_Supply;
+    int date_expry;
+    key_t key_semSupply;
+    int semSupply;
+    struct sembuf sops;
+    msgrcv(msg_generator_supply,&msg_Supply,sizeof(struct msgSupply)-sizeof(long),getpid(),0);
+
+    if(shmPort[msg_Supply.type-1].demandGoods!=1){
+        shmPort[msg_Supply.type-1].supplyGoods=1;
+        shmPort[msg_Supply.type-1].supply.type=msg_Supply.type;
+        shmPort[msg_Supply.type-1].supply.quantity=msg_Supply.quantity;
+        srand(time(NULL));
+        shmPort[msg_Supply.type-1].supply.date_expiry=(rand()%(SO_MAX_VITA-SO_MIN_VITA))+SO_MIN_VITA+1;
+
+        key_semSupply=ftok("port.c",getpid());
+        if((semSupply=semget(key_semSupply,1,0666))==-1)
+            TEST_ERROR;
+        sops.sem_op=-1;
+        semop(dumpSem,&sops,1);
+        good_d[msg_Supply.type-1].goods_in_port += msg_Supply.quantity;
+        port_d[my_index].goods_offer+=msg_Supply.quantity;
+        sops.sem_op=1;
+        semop(dumpSem,&sops,1);
+    }
+
+}
 
 /*
 Input: void
@@ -513,7 +565,10 @@ void deallocateResources(){
     if((msgctl(queMes,IPC_RMID,NULL)) == -1){
         TEST_ERROR;
     }
-    
+
+    /*Dump*/
+    shmdt(port_d);
+    shmdt(good_d);    
 } 
                     
 /*

@@ -47,6 +47,7 @@ typedef struct port_states{
     int goods_demand;
     int dock_occuped;
     int dock_total;
+    int swell;
 }struct_port_states;
 
 typedef struct ship_dump{
@@ -59,3 +60,14 @@ typedef struct ship_condition{
     pid_t ship;
     pid_t port;
 }struct_ship_condition;
+
+typedef struct msgSupply{
+    long pid;
+    int type;
+    int quantity;
+}struct_msgSupply;
+
+typedef struct weather_states{
+    int storm;
+    int maelstrom;
+}struct_weather_states;

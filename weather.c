@@ -23,15 +23,19 @@ void swell();
 void maelstrom();
 void deallocateResources();
 pid_t * ships_in_sea(int*);
+int getIndexFromPid(pid_t);
 
 struct port *ports;
 struct ship_condition * ships;
 pid_t * ship_in_sea;
+int dumpSem;
+struct weather_states* weather_d;
+struct port_states *port_d;
+
 /*Handler*/
 void signalHandler(int signal){
     switch(signal){
         case SIGUSR1:
-            
             swell();
             storm();
         break;
@@ -46,6 +50,8 @@ int main(){
     int sySem;
     int shmPort;
     int shmShip;
+    int shmWeather;
+    int shm_dump_port;
     struct sembuf sops; 
     struct sigaction sa;
     sigset_t mask;
@@ -72,7 +78,7 @@ int main(){
 
     /*SHM Ship*/
     if((shmShip = shmget(SHIP_POS_KEY,0,0666)) == -1){
-        fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
+        fprintf(stderr,"Error shared memory ship creation weather, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
 
@@ -82,22 +88,42 @@ int main(){
         fprintf(stderr,"Error assing ships to shared memory, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
-    
-    /*SHM ships*/
-    if((shmShip = shmget(SHIP_POS_KEY,0,0666 )) == -1){
-        fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
+
+    /*Sem for dump*/
+    if((dumpSem = semget(DUMP_KEY,1,0666)) == -1){
+        fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
 
-    if(( sySem = semget(SY_KEY,1,0666)) == -1){
-        fprintf(stderr,"Error sy semaphore creation, %d: %s\n",errno,strerror(errno));
+    /*SHM dump weather*/
+    if((shmWeather = shmget(WEATHER_DUMP_KEY,0, 0666)) == -1){
+        fprintf(stderr,"Error shared memory creation weather, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    weather_d = (struct weather_states *) shmat(shmWeather,NULL,0);
+    
+    if (weather_d == (void *) -1){
+        fprintf(stderr,"Error assing ships to shared memory, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    /*SHM dump port*/
+    if((shm_dump_port=shmget(PORT_DUMP_KEY,0,0666))==-1)
+        TEST_ERROR;
+
+    port_d=(struct port_states*)shmat(shm_dump_port,NULL,0);
+
+    /*Semaphore for sync*/
+    if((sySem = semget(SY_KEY,1,0666)) == -1){
+        fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
 
     bzero(&sa, sizeof(sa));
     sa.sa_handler = signalHandler;
-    sa.sa_flags=SA_RESTART||SA_NODEFER;
-    sigaction(SIGUSR2,&sa,NULL);
+    sa.sa_flags=SA_RESTART|SA_NODEFER;
+    sigaction(SIGUSR1,&sa,NULL);
     sigaction(SIGTERM,&sa,NULL);
 
     sigemptyset(&mask);
@@ -105,18 +131,23 @@ int main(){
     sops.sem_num=0;
     sops.sem_op=-1;
     sops.sem_flg=0;
-    semop(sySem,&sops,1);
+    semop(sySem,&sops,1); 
 
     sops.sem_op=0;
     semop(sySem,&sops,1);
+
     time_in_sec=SO_MAELSTROM/24;
     rem.tv_sec=0;
     rem.tv_nsec=0;
     
+    
     do{
+
         req.tv_sec=(int) time_in_sec;
         req.tv_nsec=(time_in_sec-(int)time_in_sec)*1000000000;
+        
         while(nanosleep(&req,&rem)<0){
+            
             if(errno!=EINTR){
                 TEST_ERROR;
             }else{
@@ -125,7 +156,7 @@ int main(){
             }
         }
         
-        maelstrom();      
+        maelstrom();
     }while(1);
    
     return 0;
@@ -141,7 +172,6 @@ pid_t * ships_in_sea(int* length){
     int i;
     pid_t *ships_sea;
     int j = 0;
-
     ships_sea=malloc(sizeof(pid_t));
 
     for(i=0;i<SO_NAVI;i++){
@@ -153,7 +183,10 @@ pid_t * ships_in_sea(int* length){
     }
 
     *length = j;
-    return ships_sea;  
+    if(j == 0)
+        return NULL;
+    else
+        return ships_sea;  
     
 }
 
@@ -165,10 +198,16 @@ Desc:
 */
 void swell(){
     int posPort;
+    struct sembuf sops_dump;
     srand(time(NULL));
     posPort = rand()%SO_PORTI;
     printf("Swell pid: %d\n",ports[posPort].pidPort);
-    kill(ports[posPort].pidPort,SIGUSR2);    
+    kill(ports[posPort].pidPort,SIGUSR2);
+    sops_dump.sem_op=-1;
+    semop(dumpSem,&sops_dump,1);
+    port_d[getIndexFromPid(ports[posPort].pidPort)].swell = 1;
+    sops_dump.sem_op=1;
+    semop(dumpSem,&sops_dump,1);    
 }
 
 /*
@@ -179,13 +218,19 @@ Desc:
 void storm(){
     int index;
     int length = 0;
+    struct sembuf sops_dump;
     pid_t *ships_sea = ships_in_sea(&length);
-    printf("%d\n",length);
     if(length != 0){
         srand(time(NULL));
         index=rand()%length;
         printf("Storm pid: %d\n",ships_sea[index]);
         kill(ships_sea[index],SIGUSR2);
+        /*Dump*/
+        sops_dump.sem_op=-1;
+        semop(dumpSem,&sops_dump,1);
+        weather_d->storm += 1;
+        sops_dump.sem_op=1;
+        semop(dumpSem,&sops_dump,1);   
     }
     free(ships_sea);
 }
@@ -198,19 +243,35 @@ Desc:
 void maelstrom(){
     int randShip;
     int length = 0;
+    struct sembuf sops_dump;
     pid_t *ships_sea = ships_in_sea(&length);
-    
-    if(length != 0){
-        length += 1;
+    if(ships_sea != NULL){
+        
         srand(time(NULL));
         randShip=rand()%length;
-        printf("a : %d\n",randShip); 
         printf("Maelstrom pid: %d\n",ships_sea[randShip]);
         
         kill(ships_sea[randShip],SIGALRM);
+        /*Dump*/
+        sops_dump.sem_op=-1;
+        semop(dumpSem,&sops_dump,1);
+        weather_d->maelstrom += 1;
+        sops_dump.sem_op=1;
+        semop(dumpSem,&sops_dump,1);   
     }
-
     free(ships_sea);
+}
+
+/*
+Input: void
+Output: int
+Desc: returns 0 if deallocate all resources, -1 otherwise 
+*/
+int getIndexFromPid(pid_t pidPort){
+    int i;
+    for(i = 0;i<SO_PORTI;i++)
+        if(ports[i].pidPort == pidPort)
+            return i;
 }
 
 /*
@@ -286,6 +347,10 @@ Output: int
 Desc: returns 0 if deallocate all resources, -1 otherwise 
 */
 void deallocateResources(){
+
     shmdt(ships);
     shmdt(ports);
-}   
+    shmdt(port_d);
+    shmdt(weather_d);
+
+}  

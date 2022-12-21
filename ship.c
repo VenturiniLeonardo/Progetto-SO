@@ -54,6 +54,9 @@ struct port_states* port_d;
 int time_expry_on;
 
 
+
+
+
 /*Handler*/
 void signalHandler(int signal){
 
@@ -89,10 +92,10 @@ int main(){
     int sySem;
     int shmPort;
     struct sembuf sops; 
+    struct port* prevPort;  
+    struct coords ship_coords;
     struct port* nextPort;
     struct port* currentPort;
-    struct port* prevPort;
-    struct coords ship_coords;
     struct sigaction sa;
     sigset_t mask;
     int i = 0;
@@ -110,7 +113,7 @@ int main(){
     ship_coords=generateRandCoords();
     
     if((shm_ports = shmget(PORT_POS_KEY,0,0666)) == -1){
-        fprintf(stderr,"Error shared memory, %d: %s\n",errno,strerror(errno));
+        fprintf(stderr,"Error shared memory ship_ports, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
     ports= (struct port *) shmat(shm_ports,NULL,0);
@@ -123,11 +126,13 @@ int main(){
     if((shmShip = shmget(SHIP_POS_KEY,0,0666)) == -1){
         TEST_ERROR; 
     }
+
     ships =shmat(shmShip,NULL,0);
     
     /*shm_mem for dump_port */
     if((shm_dump_port=shmget(PORT_DUMP_KEY,sizeof(struct port_states),0666))==-1)
         TEST_ERROR;
+
     port_d=(struct port_states*)shmat(shm_dump_port,NULL,0);
     TEST_ERROR;
 
@@ -140,12 +145,11 @@ int main(){
 
     /*Dump  for goods*/
     if((shm_dump_goods = shmget(GOODS_DUMP_KEY,sizeof(struct goods_states),0666 )) == -1){
-        fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
+        fprintf(stderr,"Error shared memory creation  shm_dump_goods in ship, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
 
     good_d=(struct goods_states*)shmat(shm_dump_goods,NULL,0);
-
 
     /*Sem for dump*/
     if((dumpSem = semget(DUMP_KEY,1,0666)) == -1){
@@ -162,7 +166,7 @@ int main(){
 
     bzero(&sa, sizeof(sa));
     sa.sa_handler = signalHandler;
-    sa.sa_flags=SA_RESTART||SA_NODEFER;
+    sa.sa_flags=SA_RESTART|SA_NODEFER;
     sigaction(SIGUSR2,&sa,NULL);
     sigaction(SIGUSR1,&sa,NULL);
     sigaction(SIGTERM,&sa,NULL);
@@ -181,7 +185,6 @@ int main(){
     
     /*At start Ship goes to nearest port*/
     currentPort = prevPort = nearPort(0,0,ship_coords);
-    printf("Prossimo porto: %d %f %f\n",currentPort->pidPort, currentPort->coord.x,currentPort->coord.y);
     distanza=distance(currentPort->coord.x,currentPort->coord.y,ship_coords.x,ship_coords.y)/SO_SPEED;
     rem.tv_sec=0;
     rem.tv_nsec=0;
@@ -197,13 +200,9 @@ int main(){
     }
 
     do{
-        printf("%d:   Arrivato al porto %d dopo %ld ns\n",getpid(),currentPort->pidPort,req.tv_nsec);
         nextPort = dock_access_load(currentPort->pidPort);
         if(nextPort->pidPort == 0){
             nextPort = nearPort(prevPort->pidPort,currentPort->pidPort,currentPort->coord);
-            printf("%d:  Non ho trovato nulla prossimo porto %d\n",getpid(),nextPort->pidPort);
-            printf("%d:  Prossimo porto %d\n",getpid(),nextPort->pidPort);
-            printf("%d:  Partenza \n",getpid());
             distanza=distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED;
             req.tv_sec=(int)distanza;
             req.tv_nsec=(distanza-(int)distanza)*1000000000;
@@ -218,8 +217,6 @@ int main(){
                 }
             }
         }else{
-            printf("%d:  Prossimo porto %d\n",getpid(),nextPort->pidPort);
-            printf("%d:  Partenza \n",getpid());
             distanza=distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED;
             req.tv_sec=(int)distanza;
             req.tv_nsec=(distanza-(int)distanza)*1000000000;
@@ -459,7 +456,6 @@ struct port* getSupply(pid_t pid_port){
                 /*Find goods*/
                 if((findGood = msgrcv(msgDemand,&demandGood,sizeof(int),(type+1),IPC_NOWAIT)) != -1){
                     /*time_expry_on=shmPort->supply[type].date_expry*/
-                    printf("%d   -> s: %d d: %d\n",getpid(),shmPort[type].supply.quantity,demandGood.quantity);
                     if(shmPort[type].supply.quantity>=demandGood.quantity){
                         if(demandGood.quantity<=SO_CAPACITY){
                             goods_on.quantity = demandGood.quantity;
@@ -511,8 +507,6 @@ struct port* getSupply(pid_t pid_port){
                         req.tv_nsec=rem.tv_nsec;
                     }
                     }
-                   
-                    printf("%d:  Merce caricata %d presso il porto %d\n",getpid(),goods_on.quantity,pid_port);
 
                     flagGood = 1;
                     break;
@@ -636,8 +630,6 @@ struct port* dock_access_load(pid_t pid_port){
     sops_dump.sem_op=1;
     semop(dumpSem,&sops_dump,1);     
 
-    
-    printf("%d:  Effettutato attracco %d\n",getpid(),pid_port);
     ret_get_supply = getSupply(pid_port);    
     
     undocking(pid_port);
@@ -657,9 +649,6 @@ struct port* dock_access_load(pid_t pid_port){
     sops_dump.sem_op=1;
     semop(dumpSem,&sops_dump,1);
 
-    
-    
-    printf("%d:  Lascio il molo %d\n",getpid(),pid_port);
     return ret_get_supply;
 }
 
@@ -691,7 +680,6 @@ void dock_access_unload(pid_t pidPort){
     
     sops_dump.sem_op=-1;
     semop(dumpSem,&sops_dump,1);
-    printf("%d scarico merce\n",getpid());
     /*Dump ships*/  
     ship_d->ship_in_port += 1;
     ship_d->ship_sea_goods -= 1;
@@ -785,7 +773,6 @@ void swell(){
     rem.tv_nsec=0;
     req.tv_sec=(int)time_swell;
     req.tv_nsec=(time_swell-(int)time_swell)*1000000000;
-    printf("Rallentata nave %d",getpid());
     while(nanosleep(&req,&rem)<0){
         if(errno!=EINTR){
             TEST_ERROR;
@@ -825,7 +812,6 @@ void restoreDemand(){
         good_d[goods_on.type-1].goods_on_ship -= goods_on.quantity;
         sops_dump.sem_op=1;
         semop(dumpSem,&sops_dump,1);
-        printf("Affondata nave %d con carico\n",getpid());
 
     }else{
         sops_dump.sem_op=-1;
@@ -845,7 +831,6 @@ void deallocateResources(){
     shmdt(ports);
     shmdt(ship_d);
     shmdt(good_d);
-    shmdt(shmPort);
     shmdt(ships);
 }
 
