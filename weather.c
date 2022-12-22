@@ -31,6 +31,7 @@ pid_t * ship_in_sea;
 int dumpSem;
 struct weather_states* weather_d;
 struct port_states *port_d;
+int end = 1;
 
 /*Handler*/
 void signalHandler(int signal){
@@ -63,7 +64,6 @@ int main(){
         printf("Error set all variable\n");
         return 0;
     }
-
     /*SHM ports*/
     if((shmPort = shmget(PORT_POS_KEY,0,0666 )) == -1){
         fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
@@ -157,8 +157,8 @@ int main(){
         }
         
         maelstrom();
-    }while(1);
-   
+    }while(end);
+
     return 0;
 }
 /*Functions definitions*/
@@ -172,13 +172,13 @@ pid_t * ships_in_sea(int* length){
     int i;
     pid_t *ships_sea;
     int j = 0;
-    ships_sea=malloc(sizeof(pid_t));
+    ships_sea=(pid_t*)malloc(sizeof(pid_t));
 
     for(i=0;i<SO_NAVI;i++){
         if(ships[i].ship != 0 && ships[i].port == 0){
             ships_sea[j] = ships[i].ship;
-            ships_sea=realloc(ships_sea,sizeof(pid_t));
             j++;
+            ships_sea=(pid_t*)realloc(ships_sea,(j+1)*sizeof(pid_t));
         }
     }
 
@@ -221,6 +221,7 @@ void storm(){
     struct sembuf sops_dump;
     pid_t *ships_sea = ships_in_sea(&length);
     if(length != 0){
+        printf("in\n");
         srand(time(NULL));
         index=rand()%length;
         printf("Storm pid: %d\n",ships_sea[index]);

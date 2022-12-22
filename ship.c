@@ -74,10 +74,9 @@ void signalHandler(int signal){
             ships[getPositionByShipPid()].ship = 0;
             ships[getPositionByShipPid()].port = 0;
             restoreDemand();
-            deallocateResources();
-            exit(EXIT_SUCCESS);
         break;
         case SIGTERM:
+            printf("Fine ships\n");
             deallocateResources();
             exit(EXIT_SUCCESS);
         break;
@@ -185,6 +184,7 @@ int main(){
     
     /*At start Ship goes to nearest port*/
     currentPort = prevPort = nearPort(0,0,ship_coords);
+    printf(" %d %f %f  -> %d\n",getpid(),ship_coords.x,ship_coords.y,currentPort->pidPort);
     distanza=distance(currentPort->coord.x,currentPort->coord.y,ship_coords.x,ship_coords.y)/SO_SPEED;
     rem.tv_sec=0;
     rem.tv_nsec=0;
@@ -209,7 +209,7 @@ int main(){
             prevPort = currentPort;
             currentPort = nextPort;
             while(nanosleep(&req,&rem)<0){
-                if(errno!=EINTR){
+                if(errno!=EINTR&&errno!=EINVAL){
                     TEST_ERROR;
                 }else{
                     req.tv_sec=rem.tv_sec;
@@ -217,12 +217,13 @@ int main(){
                 }
             }
         }else{
-            distanza=distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED;
+            distanza=distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED;            
+             
             req.tv_sec=(int)distanza;
             req.tv_nsec=(distanza-(int)distanza)*1000000000;
-            
+
             while(nanosleep(&req,&rem)<0){
-                if(errno!=EINTR){
+                if(errno!=EINTR&&errno!=EINVAL){
                     TEST_ERROR;
                 }else{
                     req.tv_sec=rem.tv_sec;
@@ -234,7 +235,7 @@ int main(){
             currentPort =nextPort;
             if(goods_on.date_expiry>0)
                 dock_access_unload(currentPort->pidPort);
-            }
+        }
     }while(1);
 
     return 0;
@@ -280,7 +281,6 @@ struct coords generateRandCoords(){
     srand(getpid());
     div = RAND_MAX / SO_LATO;
     c.x = rand() / div;
-    div = RAND_MAX / SO_LATO;
     c.y = rand() / div;
 
     return c;
@@ -446,7 +446,6 @@ struct port* getSupply(pid_t pid_port){
             portNear = near_ports(pid_port,SO_SPEED*shmPort[type].supply.date_expiry,&portSize); 
             /*Set for demand in near ports*/
             for(i=0;i<portSize && flagGood == 0;i++){
-            
                 if((msgDemand = msgget(portNear[i].pidPort,0666)) == -1){
                     fprintf(stderr,"Error messagge queue demand in ship, %d: %s\n",errno,strerror(errno));
                     exit(EXIT_FAILURE);
@@ -585,20 +584,20 @@ struct port* near_ports(pid_t currPort,double max_distance,int *length){
     int j=0;
     struct coords currCoord;
 
-    port_return=malloc(sizeof(struct port));
+    port_return=(struct port*)malloc(sizeof(struct port));
     currCoord = (getCoordFromPid(currPort));
 
     for(i=0;i<SO_PORTI;i++){  
         if((ports[i].pidPort != currPort) && (distance(currCoord.x,currCoord.y,ports[i].coord.x,ports[i].coord.y)<max_distance)){
+            port_return[j].coord.x=ports[i].coord.x;
             port_return[j].coord.y=ports[i].coord.y;
             port_return[j].pidPort=ports[i].pidPort;
-                 
-            port_return=realloc(port_return,sizeof(struct port));
-            j++;
+            j++;     
+            port_return=(struct port*)realloc(port_return,(j+1)*sizeof(struct port));
+
         }
     }
     *length = j;
-
     return port_return;  
 }        
       
@@ -648,7 +647,6 @@ struct port* dock_access_load(pid_t pid_port){
     port_d[get_index_from_pid(pid_port)].dock_occuped--;
     sops_dump.sem_op=1;
     semop(dumpSem,&sops_dump,1);
-
     return ret_get_supply;
 }
 

@@ -66,7 +66,6 @@ int main(){
         printf("Error set all variable\n");
         return 0;
     }
-
     /*Shared Memory for ships*/
     if((shmShip = shmget(SHIP_POS_KEY,sizeof(struct ship_condition)*SO_NAVI,IPC_CREAT|IPC_EXCL|0666 )) == -1){
         fprintf(stderr,"Error shared memory ship creation master, %d: %s\n",errno,strerror(errno));
@@ -78,6 +77,7 @@ int main(){
         fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
+
 
     if(semctl(sySem,0,SETVAL,SO_NAVI+SO_PORTI+2)<0){
         fprintf(stderr,"Error initializing semaphore, %d: %s\n",errno,strerror(errno));
@@ -168,7 +168,7 @@ int main(){
     
     /*elapsed days*/
     elapsedDays=0; 
-    srand(time(NULL)); 
+
     while(elapsedDays<SO_DAYS){
         sleep(1);
         /*nRandPort=rand()%SO_PORTI; 
@@ -178,8 +178,8 @@ int main(){
             kill(ports[RandPort].pidPort,SIGALRM);
             +
         }*/
-        kill(weatherPid,SIGUSR1);
-        generatorDailySupply();
+        /*kill(weatherPid,SIGUSR1);*/
+        /*generatorDailySupply();*/
         printf("Day %d\n",elapsedDays+1);
         /*updateDateExpiry();*/
         if(printDump(dSem,struct_goods_dump,struct_port_dump,struct_ship_dump,weather_d)){
@@ -194,10 +194,11 @@ int main(){
 
     /*Kill all process*/ 
     stopWeather();
-    stopAllShips();
     killAllPorts();
+    stopAllShips();
     deallocateResources(struct_goods_dump,struct_port_dump,struct_ship_dump,weather_d);
 
+    printf("Fine master\n");
     return 0;
 }
 
@@ -210,7 +211,7 @@ Desc: return random int in range(max-min)
 */
 int genRandInt(int max, int min){
     int r;
-    srand(time(NULL));
+   srand(time(NULL));
     r = (rand()%(max-min+1))+min;
     return r;
 }
@@ -225,7 +226,6 @@ struct coords generateRandCoords(){
     double div;
     div = RAND_MAX / SO_LATO;
     c.x = rand() / div;
-    div = RAND_MAX / SO_LATO;
     c.y = rand() / div;
     return c;
 }
@@ -284,6 +284,7 @@ void portGenerator(){
     ports[3].coord.x = SO_LATO; 
     ports[3].coord.y = 0;
     /*generating SO_PORTI-4 ports*/
+    srand(time(NULL));
     for (i=4;i<SO_PORTI;i++){  
         do{
             myC=generateRandCoords(); 
@@ -503,6 +504,7 @@ Desc: returns 0 if deallocate all resources, -1 otherwise
 void killAllPorts(){
     int i;
     for(i = 0 ; i< SO_PORTI;i++){
+        printf("kill %d\n",ports[i].pidPort);
         kill(ports[i].pidPort,SIGTERM);
     }
 }
@@ -516,6 +518,7 @@ Desc: returns 0 if deallocate all resources, -1 otherwise
 void stopAllShips(){
     int i;
     for(i = 0; i< SO_NAVI;i++){
+        printf("%d kill \n",ships[i].ship);
         if(ships[i].ship != 0)
             kill(ships[i].ship,SIGTERM);
     }
@@ -596,8 +599,9 @@ int variableUpdate(){
 int port_is_present(pid_t ports_insert,pid_t *ports_Supply,int ports_in){
     int i;
     for(i=0;i<ports_in;i++){
-        if(ports_insert==ports_Supply[i])
+        if(ports_insert==ports_Supply[i]){
             return 1;
+        }
     }
     return 0;
 }
@@ -617,11 +621,11 @@ void generatorDailySupply(){
     srand(time(NULL));
 
     num_ports=(rand()%SO_PORTI)+1;
+    
     ports_Supply=malloc(sizeof(pid_t)*num_ports);
     while(i<num_ports){
-        srand(time(NULL));
         index_port=rand()%SO_PORTI;
-        port_insert=ports[i].pidPort;
+        port_insert=ports[index_port].pidPort;
         if(!port_is_present(port_insert,ports_Supply,i+1)){
             ports_Supply[i]=port_insert;
             msg_Supply.pid=ports_Supply[i];
@@ -641,13 +645,14 @@ Desc: returns 0 if deallocate all resources, -1 otherwise
 */
 
 void updateDateExpiry(){
-        int i;
+    int i;
     for(i = 0; i< SO_PORTI;i++){
         kill(ports[i].pidPort,SIGUSR1);
     }
 
     for(i = 0;i<SO_NAVI;i++){
-        kill(ships[i].ship,SIGUSR1);
+        if(ships[i].ship != 0)
+            kill(ships[i].ship,SIGUSR1);
     }
 }
 

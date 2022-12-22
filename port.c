@@ -55,7 +55,8 @@ void signalHandler(int signal){
             generatorDailySupply();
         break;
         case SIGTERM:
-            end = 0;
+            deallocateResources();
+            exit(EXIT_SUCCESS);
         break;
     }
 }
@@ -162,7 +163,7 @@ int main(int argc,char*argv[]){
         
     bzero(&sa, sizeof(sa));
     sa.sa_handler = signalHandler;
-    sa.sa_flags=SA_NODEFER;
+    sa.sa_flags= SA_RESTART|SA_NODEFER;
     sigaction(SIGUSR2,&sa,NULL);
     sigaction(SIGUSR1,&sa,NULL);
     sigaction(SIGTERM,&sa,NULL);
@@ -186,10 +187,7 @@ int main(int argc,char*argv[]){
     /*WAIT SIGNAL*/
     do{
         sigsuspend(&mask);
-    }while(end);
-
-    deallocateResources();
-    return 0;
+    }while(1);
 }
 
 
@@ -207,24 +205,30 @@ void generatorDailySupply(){
     int semSupply;
     struct sembuf sops;
     msgrcv(msg_generator_supply,&msg_Supply,sizeof(struct msgSupply)-sizeof(long),getpid(),0);
+    srand(getpid());
+    if((semSupply=semget(ftok("port.c",getpid()),1,0666))==-1)
+        TEST_ERROR;
+
+    sops.sem_num=0;
+    sops.sem_op=-1;
+    sops.sem_flg=0;
+    semop(semSupply,&sops,1);
 
     if(shmPort[msg_Supply.type-1].demandGoods!=1){
+        printf("generatore: %d %d %d\n",getpid(),shmPort[msg_Supply.type-1].supply.type,shmPort[msg_Supply.type-1].supply.quantity);
         shmPort[msg_Supply.type-1].supplyGoods=1;
         shmPort[msg_Supply.type-1].supply.type=msg_Supply.type;
         shmPort[msg_Supply.type-1].supply.quantity=msg_Supply.quantity;
-        srand(time(NULL));
         shmPort[msg_Supply.type-1].supply.date_expiry=(rand()%(SO_MAX_VITA-SO_MIN_VITA))+SO_MIN_VITA+1;
-
-        key_semSupply=ftok("port.c",getpid());
-        if((semSupply=semget(key_semSupply,1,0666))==-1)
-            TEST_ERROR;
-        sops.sem_op=-1;
+        
         semop(dumpSem,&sops,1);
         good_d[msg_Supply.type-1].goods_in_port += msg_Supply.quantity;
         port_d[my_index].goods_offer+=msg_Supply.quantity;
         sops.sem_op=1;
         semop(dumpSem,&sops,1);
     }
+    sops.sem_op=1;
+    semop(semSupply,&sops,1);
 
 }
 
@@ -276,7 +280,7 @@ int generatorSupply(){
     newGood.type = (rand() % SO_MERCI)+1;
 
     shmPort[newGood.type-1].supplyGoods = 1;
-    newGood.quantity = (SO_FILL/SO_PORTI)/2;
+    newGood.quantity = (SO_FILL/SO_PORTI);
 
     sops_dump.sem_op=-1;
     semop(dumpSem,&sops_dump,1);
@@ -291,8 +295,6 @@ int generatorSupply(){
     port_d[my_index].goods_offer+=newGood.quantity;
     sops_dump.sem_op=1;
     semop(dumpSem,&sops_dump,1);
-
-    srand(getpid());
 
     newGood.date_expiry = (rand()%SO_MAX_VITA-SO_MIN_VITA)+SO_MIN_VITA+1;
     shmPort[newGood.type-1].supply.quantity = newGood.quantity;
@@ -395,8 +397,7 @@ int generatorDemand(){
         return -1;
     }
     shmPort[msg.type-1].demandGoods = 1;
-    srand(time(NULL));
-    msg.quantity =  (SO_FILL/SO_PORTI)/2;
+    msg.quantity =  (SO_FILL/SO_PORTI);
     quantityDemand += msg.quantity;
     
     if(sndDemand = msgsnd(mqDemand,&msg,sizeof(int),IPC_NOWAIT) == -1){
@@ -527,7 +528,8 @@ void deallocateResources(){
     int shm_offer;
     int semSupply;
     int shm_dock;
-    
+
+    printf("Fine porto \n");
     /*Shm ships/ports*/
     shmdt(ships);
 
