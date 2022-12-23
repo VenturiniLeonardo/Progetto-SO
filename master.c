@@ -178,10 +178,10 @@ int main(){
             kill(ports[RandPort].pidPort,SIGALRM);
             +
         }*/
-        /*kill(weatherPid,SIGUSR1);*/
-        /*generatorDailySupply();*/
+        generatorDailySupply();
+        kill(weatherPid,SIGUSR1);
         printf("Day %d\n",elapsedDays+1);
-        /*updateDateExpiry();*/
+        updateDateExpiry();
         if(printDump(dSem,struct_goods_dump,struct_port_dump,struct_ship_dump,weather_d)){
             printf("Offerta / richiesta / navi pari a zero.... Terminazione\n");
             elapsedDays = SO_DAYS;
@@ -198,7 +198,6 @@ int main(){
     stopAllShips();
     deallocateResources(struct_goods_dump,struct_port_dump,struct_ship_dump,weather_d);
 
-    printf("Fine master\n");
     return 0;
 }
 
@@ -504,7 +503,6 @@ Desc: returns 0 if deallocate all resources, -1 otherwise
 void killAllPorts(){
     int i;
     for(i = 0 ; i< SO_PORTI;i++){
-        printf("kill %d\n",ports[i].pidPort);
         kill(ports[i].pidPort,SIGTERM);
     }
 }
@@ -518,7 +516,6 @@ Desc: returns 0 if deallocate all resources, -1 otherwise
 void stopAllShips(){
     int i;
     for(i = 0; i< SO_NAVI;i++){
-        printf("%d kill \n",ships[i].ship);
         if(ships[i].ship != 0)
             kill(ships[i].ship,SIGTERM);
     }
@@ -631,7 +628,8 @@ void generatorDailySupply(){
             msg_Supply.pid=ports_Supply[i];
             msg_Supply.type=(rand()%SO_MERCI)+1;
             msg_Supply.quantity=(SO_FILL/SO_DAYS)/num_ports;
-            msgsnd(msg_generator_supply,&msg_Supply,sizeof(struct msgSupply)-sizeof(long));
+            if(msgsnd(msg_generator_supply,&msg_Supply,sizeof(struct msgSupply)-sizeof(long)) == -1)
+                TEST_ERROR;
             kill(ports_Supply[i],SIGALRM);
             i++;
         }

@@ -125,7 +125,6 @@ int main(int argc,char*argv[]){
     semSupply=semget(key_semSupply,1,IPC_CREAT|IPC_EXCL|0666);
     if(semctl(semSupply,0,SETVAL,1)==-1){
         TEST_ERROR;
-        printf("error on shm for Supply line 127");
     }
 
     /*MESSAGGE QUEUE FOR DEMAND*/
@@ -140,13 +139,11 @@ int main(int argc,char*argv[]){
     shmPort = (struct shmSinglePort *)shmat(shm_offer, NULL, 0);
     if(shmPort == (void *) -1){
         TEST_ERROR;
-        printf("error on shm for offer line 141");
     }
 
     /*shm for ships attached to a port */
     if((shmShip = shmget(SHIP_POS_KEY,0,0666)) == -1){
         TEST_ERROR;
-        printf("error on shm for ships attached to a port line 145");
     }
     ships =shmat(shmShip,NULL,0);
 
@@ -167,7 +164,7 @@ int main(int argc,char*argv[]){
     sigaction(SIGUSR2,&sa,NULL);
     sigaction(SIGUSR1,&sa,NULL);
     sigaction(SIGTERM,&sa,NULL);
-
+    sigaction(SIGALRM,&sa,NULL);
     sigemptyset(&mask);
     
     
@@ -199,13 +196,15 @@ Output: int
 Desc: return random int between 1 and SO_BANCHINE
 */
 void generatorDailySupply(){
+
     struct msgSupply msg_Supply;
     int date_expry;
     key_t key_semSupply;
     int semSupply;
     struct sembuf sops;
+
     msgrcv(msg_generator_supply,&msg_Supply,sizeof(struct msgSupply)-sizeof(long),getpid(),0);
-    srand(getpid());
+    
     if((semSupply=semget(ftok("port.c",getpid()),1,0666))==-1)
         TEST_ERROR;
 
@@ -213,14 +212,12 @@ void generatorDailySupply(){
     sops.sem_op=-1;
     sops.sem_flg=0;
     semop(semSupply,&sops,1);
-
-    if(shmPort[msg_Supply.type-1].demandGoods!=1){
-        printf("generatore: %d %d %d\n",getpid(),shmPort[msg_Supply.type-1].supply.type,shmPort[msg_Supply.type-1].supply.quantity);
+    if(shmPort[msg_Supply.type-1].demandGoods==0){
         shmPort[msg_Supply.type-1].supplyGoods=1;
         shmPort[msg_Supply.type-1].supply.type=msg_Supply.type;
         shmPort[msg_Supply.type-1].supply.quantity=msg_Supply.quantity;
+        srand(getpid());
         shmPort[msg_Supply.type-1].supply.date_expiry=(rand()%(SO_MAX_VITA-SO_MIN_VITA))+SO_MIN_VITA+1;
-        
         semop(dumpSem,&sops,1);
         good_d[msg_Supply.type-1].goods_in_port += msg_Supply.quantity;
         port_d[my_index].goods_offer+=msg_Supply.quantity;
@@ -229,7 +226,6 @@ void generatorDailySupply(){
     }
     sops.sem_op=1;
     semop(semSupply,&sops,1);
-
 }
 
 /*
@@ -500,7 +496,6 @@ void swell(){
     struct timespec rem;
     double time_swell=SO_SWELL_DURATION/24;
     stop_ships();
-    printf("Porto %d bloccato\n",getpid());
     rem.tv_sec=0;
     rem.tv_nsec=0;
     req.tv_sec=(int)time_swell;
@@ -529,7 +524,6 @@ void deallocateResources(){
     int semSupply;
     int shm_dock;
 
-    printf("Fine porto \n");
     /*Shm ships/ports*/
     shmdt(ships);
 

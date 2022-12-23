@@ -76,7 +76,6 @@ void signalHandler(int signal){
             restoreDemand();
         break;
         case SIGTERM:
-            printf("Fine ships\n");
             deallocateResources();
             exit(EXIT_SUCCESS);
         break;
@@ -199,6 +198,10 @@ int main(){
         }
     }
 
+    while(1){
+
+    }
+
     do{
         nextPort = dock_access_load(currentPort->pidPort);
         if(nextPort->pidPort == 0){
@@ -209,7 +212,7 @@ int main(){
             prevPort = currentPort;
             currentPort = nextPort;
             while(nanosleep(&req,&rem)<0){
-                if(errno!=EINTR&&errno!=EINVAL){
+                if(errno!=EINTR){
                     TEST_ERROR;
                 }else{
                     req.tv_sec=rem.tv_sec;
@@ -223,7 +226,7 @@ int main(){
             req.tv_nsec=(distanza-(int)distanza)*1000000000;
 
             while(nanosleep(&req,&rem)<0){
-                if(errno!=EINTR&&errno!=EINVAL){
+                if(errno!=EINTR){
                     TEST_ERROR;
                 }else{
                     req.tv_sec=rem.tv_sec;

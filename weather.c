@@ -201,7 +201,6 @@ void swell(){
     struct sembuf sops_dump;
     srand(time(NULL));
     posPort = rand()%SO_PORTI;
-    printf("Swell pid: %d\n",ports[posPort].pidPort);
     kill(ports[posPort].pidPort,SIGUSR2);
     sops_dump.sem_op=-1;
     semop(dumpSem,&sops_dump,1);
@@ -221,10 +220,8 @@ void storm(){
     struct sembuf sops_dump;
     pid_t *ships_sea = ships_in_sea(&length);
     if(length != 0){
-        printf("in\n");
         srand(time(NULL));
         index=rand()%length;
-        printf("Storm pid: %d\n",ships_sea[index]);
         kill(ships_sea[index],SIGUSR2);
         /*Dump*/
         sops_dump.sem_op=-1;
@@ -246,12 +243,9 @@ void maelstrom(){
     int length = 0;
     struct sembuf sops_dump;
     pid_t *ships_sea = ships_in_sea(&length);
+    srand(time(NULL));
     if(ships_sea != NULL){
-        
-        srand(time(NULL));
-        randShip=rand()%length;
-        printf("Maelstrom pid: %d\n",ships_sea[randShip]);
-        
+        randShip=rand()%length;    
         kill(ships_sea[randShip],SIGALRM);
         /*Dump*/
         sops_dump.sem_op=-1;
