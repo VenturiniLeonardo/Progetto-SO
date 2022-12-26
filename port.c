@@ -103,9 +103,12 @@ int main(int argc,char*argv[]){
         TEST_ERROR;
 
     port_d=(struct port_states*)shmat(shm_dump_port,NULL,0);
-
-    port_d[my_index].dock_total = nDocks;
+    port_d[my_index].goods_demand = 0;
+    port_d[my_index].goods_offer = 0;
+    port_d[my_index].goods_receved = 0;
+    port_d[my_index].goods_sended = 0;
     port_d[my_index].swell = 0;
+    port_d[my_index].dock_total = nDocks;
     /*Dump  for goods*/
     if((shm_dump_goods = shmget(GOODS_DUMP_KEY,sizeof(struct goods_states),0666 )) == -1){
         fprintf(stderr,"Error shared memory good dump creation in port, %d: %s\n",errno,strerror(errno));
@@ -220,9 +223,10 @@ void generatorDailySupply(){
         shmPort[msg_Supply.type-1].supply.date_expiry=(rand()%(SO_MAX_VITA-SO_MIN_VITA))+SO_MIN_VITA+1;
         semop(dumpSem,&sops,1);
         good_d[msg_Supply.type-1].goods_in_port += msg_Supply.quantity;
-        port_d[my_index].goods_offer+=msg_Supply.quantity;
+        port_d[my_index].goods_offer += msg_Supply.quantity;
         sops.sem_op=1;
         semop(dumpSem,&sops,1);
+        printf("Generato t: %d q: %d s:%d -> %d\n",msg_Supply.type,msg_Supply.quantity,shmPort[msg_Supply.type-1].supply.date_expiry,getpid());
     }
     sops.sem_op=1;
     semop(semSupply,&sops,1);

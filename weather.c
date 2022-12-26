@@ -107,7 +107,7 @@ int main(){
         fprintf(stderr,"Error assing ships to shared memory, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
-
+    
     /*SHM dump port*/
     if((shm_dump_port=shmget(PORT_DUMP_KEY,0,0666))==-1)
         TEST_ERROR;
@@ -142,7 +142,7 @@ int main(){
     
     
     do{
-
+        
         req.tv_sec=(int) time_in_sec;
         req.tv_nsec=(time_in_sec-(int)time_in_sec)*1000000000;
         
@@ -177,6 +177,7 @@ pid_t * ships_in_sea(int* length){
     for(i=0;i<SO_NAVI;i++){
         if(ships[i].ship != 0 && ships[i].port == 0){
             ships_sea[j] = ships[i].ship;
+
             j++;
             ships_sea=(pid_t*)realloc(ships_sea,(j+1)*sizeof(pid_t));
         }

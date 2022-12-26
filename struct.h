@@ -57,8 +57,8 @@ typedef struct ship_dump{
 }struct_ship_dump;
 
 typedef struct ship_condition{
-    pid_t ship;
-    pid_t port;
+    int ship;
+    int port;
 }struct_ship_condition;
 
 typedef struct msgSupply{

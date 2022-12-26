@@ -110,6 +110,14 @@ int main(){
     struct_goods_dump=(struct goods_states*) shmat(shm_dump_goods,NULL,0);
     TEST_ERROR; 
 
+    for(i=0;i++;i<SO_MERCI){
+        struct_goods_dump[i].goods_delivered = 0;
+        struct_goods_dump[i].goods_expired_port = 0;
+        struct_goods_dump[i].goods_expired_ship = 0;
+        struct_goods_dump[i].goods_in_port = 0;
+        struct_goods_dump[i].goods_on_ship = 0;
+    }
+
    
     /*Shared memory for dump of port*/
 
@@ -171,15 +179,8 @@ int main(){
 
     while(elapsedDays<SO_DAYS){
         sleep(1);
-        /*nRandPort=rand()%SO_PORTI; 
-        kill(ports[nRandPort].pidPort,SIGALRM);  
-        for(i=0;i<nRandPort;i++){ 
-            RandPort=rand()%SO_PORTI;
-            kill(ports[RandPort].pidPort,SIGALRM);
-            +
-        }*/
-        generatorDailySupply();
         kill(weatherPid,SIGUSR1);
+        generatorDailySupply();
         printf("Day %d\n",elapsedDays+1);
         updateDateExpiry();
         if(printDump(dSem,struct_goods_dump,struct_port_dump,struct_ship_dump,weather_d)){
@@ -194,8 +195,8 @@ int main(){
 
     /*Kill all process*/ 
     stopWeather();
-    killAllPorts();
     stopAllShips();
+    killAllPorts();
     deallocateResources(struct_goods_dump,struct_port_dump,struct_ship_dump,weather_d);
 
     return 0;
