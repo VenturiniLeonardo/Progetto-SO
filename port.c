@@ -205,7 +205,7 @@ void generatorDailySupply(){
     key_t key_semSupply;
     int semSupply;
     struct sembuf sops;
-
+    struct sembuf sops_dump;
     msgrcv(msg_generator_supply,&msg_Supply,sizeof(struct msgSupply)-sizeof(long),getpid(),0);
     
     if((semSupply=semget(ftok("port.c",getpid()),1,0666))==-1)
@@ -220,12 +220,16 @@ void generatorDailySupply(){
         shmPort[msg_Supply.type-1].supply.type=msg_Supply.type;
         shmPort[msg_Supply.type-1].supply.quantity=msg_Supply.quantity;
         srand(getpid());
-        shmPort[msg_Supply.type-1].supply.date_expiry=(rand()%(SO_MAX_VITA-SO_MIN_VITA))+SO_MIN_VITA+1;
-        semop(dumpSem,&sops,1);
+        shmPort[msg_Supply.type-1].supply.date_expiry=(rand()%SO_MAX_VITA-SO_MIN_VITA+1)+SO_MIN_VITA;
+        sops_dump.sem_num=0;
+        sops_dump.sem_op=-1;
+        sops_dump.sem_flg=0;
+        semop(dumpSem,&sops_dump,1);
         good_d[msg_Supply.type-1].goods_in_port += msg_Supply.quantity;
         port_d[my_index].goods_offer += msg_Supply.quantity;
         sops.sem_op=1;
-        semop(dumpSem,&sops,1);
+        sops_dump.sem_op=1;
+        semop(dumpSem,&sops_dump,1);
         printf("Generato t: %d q: %d s:%d -> %d\n",msg_Supply.type,msg_Supply.quantity,shmPort[msg_Supply.type-1].supply.date_expiry,getpid());
     }
     sops.sem_op=1;
@@ -296,7 +300,7 @@ int generatorSupply(){
     sops_dump.sem_op=1;
     semop(dumpSem,&sops_dump,1);
 
-    newGood.date_expiry = (rand()%SO_MAX_VITA-SO_MIN_VITA)+SO_MIN_VITA+1;
+    newGood.date_expiry = (rand()%SO_MAX_VITA-SO_MIN_VITA+1)+SO_MIN_VITA;
     shmPort[newGood.type-1].supply.quantity = newGood.quantity;
     shmPort[newGood.type-1].supply.date_expiry = newGood.date_expiry;
     shmPort[newGood.type-1].supply.type = newGood.type;
@@ -338,7 +342,7 @@ void reloadExpiryDate(){
 
     for(i=0;i<SO_MERCI;i++){
         if(shmPort[i].supplyGoods == 1){
-            if(shmPort[i].supply.date_expiry > 0)
+            if(shmPort[i].supply.date_expiry > 1)
                 shmPort[i].supply.date_expiry--;
             else{
                 shmPort[i].supply.date_expiry = -1;
