@@ -6,7 +6,6 @@ int SO_PORTI;  /*number of ports (int,>= 4)*/
 int SO_BANCHINE; /*maximum number of docks (int)*/
 int SO_FILL;  /*maximum goods capacity of the port*/
 int SO_LOADSPEED; /*loading/unloading speed of ports (ton/days)*/
-double SO_DISTANZA;  /*minimum distance between two ports*/
 
 /*SHIPS*/
 int SO_NAVI; /*number of ships (int,>=1)*/
@@ -26,6 +25,8 @@ double SO_LATO ;  /*side of the map (double)*/
 int SO_STORM_DURATION ;/*duration of storm (hours)*/
 int SO_SWELL_DURATION ;/*duration of swell (hours)*/
 int SO_MAELSTROM ;/*mealstrom repeat (hours)*/
+
+#define SO_DISTANZA 0.0001   /*minimum distance between two ports*/
 
 /*KEY SHARE MEMORY*/
 #define PORT_POS_KEY 57 /*key for shared memory contains array coords*/

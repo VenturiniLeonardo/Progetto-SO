@@ -136,16 +136,13 @@ int main(){
     sops.sem_op=0;
     semop(sySem,&sops,1);
 
-    time_in_sec=SO_MAELSTROM/24;
+    time_in_sec=SO_MAELSTROM/24.0;
     rem.tv_sec=0;
     rem.tv_nsec=0;
-    
-    
     do{
         
         req.tv_sec=(int) time_in_sec;
         req.tv_nsec=(time_in_sec-(int)time_in_sec)*1000000000;
-        
         while(nanosleep(&req,&rem)<0){
             
             if(errno!=EINTR){
@@ -155,7 +152,6 @@ int main(){
                 req.tv_nsec=rem.tv_nsec;
             }
         }
-        
         maelstrom();
     }while(end);
 
@@ -299,8 +295,6 @@ int variableUpdate(){
             SO_FILL = atoi(value);
         if(strcmp(variable,"SO_LOADSPEED")== 0)
             SO_LOADSPEED = atof(value);
-        if(strcmp(variable,"SO_DISTANZA")== 0)
-            SO_DISTANZA = atof(value);
         if(strcmp(variable,"SO_NAVI")== 0){
             SO_NAVI = atoi(value);
             if(SO_NAVI < 1)

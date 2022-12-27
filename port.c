@@ -125,6 +125,7 @@ int main(int argc,char*argv[]){
 
     /*Sem creation for Supply */
     key_semSupply=ftok("port.c",getpid());
+    printf("%d \n",key_semSupply);
     semSupply=semget(key_semSupply,1,IPC_CREAT|IPC_EXCL|0666);
     if(semctl(semSupply,0,SETVAL,1)==-1){
         TEST_ERROR;
@@ -230,7 +231,6 @@ void generatorDailySupply(){
         sops.sem_op=1;
         sops_dump.sem_op=1;
         semop(dumpSem,&sops_dump,1);
-        printf("Generato t: %d q: %d s:%d -> %d\n",msg_Supply.type,msg_Supply.quantity,shmPort[msg_Supply.type-1].supply.date_expiry,getpid());
     }
     sops.sem_op=1;
     semop(semSupply,&sops,1);
@@ -502,7 +502,7 @@ void swell(){
     int semVal = blockAllDock();
     struct timespec req;
     struct timespec rem;
-    double time_swell=SO_SWELL_DURATION/24;
+    double time_swell=SO_SWELL_DURATION/24.0;
     stop_ships();
     rem.tv_sec=0;
     rem.tv_nsec=0;
@@ -531,6 +531,7 @@ void deallocateResources(){
     int shm_offer;
     int semSupply;
     int shm_dock;
+    key_t supplyKey;
 
     /*Shm ships/ports*/
     shmdt(ships);
@@ -544,7 +545,8 @@ void deallocateResources(){
     }
 
     /*Sem Offer*/
-    if((semSupply=semget(ftok("port.c",getpid()),1,0666)) == -1){
+    supplyKey = ftok("port.c",getpid());
+    if((semSupply=semget(supplyKey,1,0666)) == -1){
         TEST_ERROR;
     }
     if((semctl(semSupply,0,IPC_RMID)) == -1){
@@ -604,8 +606,6 @@ int variableUpdate(){
             SO_FILL = atoi(value);
         if(strcmp(variable,"SO_LOADSPEED")== 0)
             SO_LOADSPEED = atof(value);
-        if(strcmp(variable,"SO_DISTANZA")== 0)
-            SO_DISTANZA = atof(value);
         if(strcmp(variable,"SO_NAVI")== 0){
             SO_NAVI = atoi(value);
             if(SO_NAVI < 1)

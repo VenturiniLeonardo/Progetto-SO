@@ -154,15 +154,17 @@ int main(){
         fprintf(stderr,"Error shared memory shm weather creation in master, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
+
+    weather_d = (struct weather_states *) shmat(shmWeather,NULL,0);
+    weather_d->maelstrom = 0;
+    weather_d->storm = 0;
     /*PORT AND SHIP*/
 
     portGenerator();
     shipGenerator();
     weatherGenerator();
 
-    weather_d = (struct weather_states *) shmat(shmWeather,NULL,0);
-    weather_d->maelstrom = 0;
-    weather_d->storm = 0;
+
 
     sops.sem_num=0;
     sops.sem_op=-1;
@@ -178,9 +180,9 @@ int main(){
     elapsedDays=0; 
 
     while(elapsedDays<SO_DAYS){
+        generatorDailySupply();
         sleep(1);
         kill(weatherPid,SIGUSR1);
-        generatorDailySupply();
         printf("Day %d\n",elapsedDays+1);
         updateDateExpiry();
         if(printDump(dSem,struct_goods_dump,struct_port_dump,struct_ship_dump,weather_d)){
@@ -191,12 +193,13 @@ int main(){
         }
     }
 
-    printFinalDump(dSem,struct_goods_dump,struct_port_dump,struct_ship_dump,weather_d);
 
     /*Kill all process*/ 
+    
     stopWeather();
     stopAllShips();
     killAllPorts();
+    printFinalDump(dSem,struct_goods_dump,struct_port_dump,struct_ship_dump,weather_d);
     deallocateResources(struct_goods_dump,struct_port_dump,struct_ship_dump,weather_d);
 
     return 0;
@@ -396,7 +399,7 @@ int printDump(int dSem,struct goods_states* good_d,struct port_states* port_d,st
         printf("- Merce scaduta in nave %d\n",good_d[i].goods_expired_ship);
         printf("- Merce ricevuta %d\n",good_d[i].goods_delivered);
     }
-
+    
     printf("\nPORTI\n");
     for(i = 0; i< SO_PORTI; i++){
         printf("Porto %d\n",i+1);
@@ -408,7 +411,7 @@ int printDump(int dSem,struct goods_states* good_d,struct port_states* port_d,st
         printf("- Banchine occupate %d\n",port_d[i].dock_occuped);
         printf("- Banchine totali %d\n",port_d[i].dock_total);
     }
-
+    
     printf("\nNAVI: \n");
     printf("- Navi in porto %d\n",ship_d->ship_in_port);
     printf("- Navi in mare con carico %d\n",ship_d->ship_sea_goods);
@@ -555,8 +558,6 @@ int variableUpdate(){
             SO_FILL = atoi(value);
         if(strcmp(variable,"SO_LOADSPEED")== 0)
             SO_LOADSPEED = atof(value);
-        if(strcmp(variable,"SO_DISTANZA")== 0)
-            SO_DISTANZA = atof(value);
         if(strcmp(variable,"SO_NAVI")== 0){
             SO_NAVI = atoi(value);
             if(SO_NAVI < 1)
