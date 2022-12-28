@@ -81,12 +81,12 @@ int main(int argc,char*argv[]){
     int shmShip;
     quantityDemand = 0;
     quantitySupply = 0;
-
     my_index=atoi(argv[1]);
     if(variableUpdate()){
         printf("Error set all variable\n");
         return 0;
     }
+
     nDocks = generatorDock();
     /*Semaphore creation docks*/
 
@@ -242,8 +242,9 @@ Output: int
 Desc: return random int between 1 and SO_BANCHINE
 */
 int generatorDock(){
-    srand(time(NULL));
+    srand(getpid());
     return (rand()%SO_BANCHINE)+1;
+
 }
 
 /*
