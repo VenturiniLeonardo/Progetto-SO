@@ -41,7 +41,7 @@ int msg_generator_supply;
 
 /*Master main*/
 int main(){
-    
+    int dSem_ship;
     int sySem;
     int sem_dump;
     int shm_dump_goods;
@@ -97,6 +97,15 @@ int main(){
     }
 
     if(semctl(dSem,0,SETVAL,1) == -1){
+        fprintf(stderr,"Error initializing semaphore, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    if((dSem_ship = semget(DUMP_KEY_SHIP,1,IPC_CREAT|IPC_EXCL|0666)) == -1){
+        fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    if(semctl(dSem_ship,0,SETVAL,1) == -1){
         fprintf(stderr,"Error initializing semaphore, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
@@ -432,15 +441,12 @@ int printDump(int dSem,struct goods_states* good_d,struct port_states* port_d,st
 
 
 void printFinalDump(int dSem,struct goods_states* good_d,struct port_states* port_d,struct ship_dump* ship_d,struct weather_states * weather_d){
-    struct sembuf sops_dump;
     int i;
     int maxSupply = 0;
     int indexMaxSupply = -1;
     int maxDemand = 0;
     int indexMaxDemand = -1;
 
-    sops_dump.sem_op=-1;
-    semop(dSem,&sops_dump,1);
     printf("\n\nREPORT FINALE\n");
     printf("MERCI \n");
     for(i = 0;i<SO_MERCI;i++){
@@ -491,10 +497,6 @@ void printFinalDump(int dSem,struct goods_states* good_d,struct port_states* por
     printf("\nRECORD: \n");
     printf("Il porto %d ha offerto più merce -> %d ton\n",indexMaxSupply+1,maxSupply);
     printf("Il porto %d ha richiesto più merce -> %d ton\n",indexMaxDemand+1,maxDemand);
-
-
-    sops_dump.sem_op=1;
-    semop(dSem,&sops_dump,1);
 
 }
 
@@ -671,6 +673,7 @@ int deallocateResources(struct goods_states* good_d,struct port_states* port_d,s
     int shm_dump_port;
     int shm_dump_ship;
     int shmWeather;
+    int dSem_ship;
 
     /*Sy SEMAPHORE */
 
@@ -714,6 +717,16 @@ int deallocateResources(struct goods_states* good_d,struct port_states* port_d,s
     if((dSem=semctl(dSem,0,IPC_RMID)) == -1){
         TEST_ERROR;
     }
+
+
+    if((dSem_ship = semget(DUMP_KEY_SHIP,1,0666)) == -1){
+        TEST_ERROR;
+    }
+
+    if((dSem_ship=semctl(dSem_ship,0,IPC_RMID)) == -1){
+        TEST_ERROR;
+    }
+    
 
     /*Shared memory for dump of goods*/
     if((shm_dump_goods = shmget(GOODS_DUMP_KEY,sizeof(struct goods_states),0666 )) == -1){

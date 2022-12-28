@@ -41,7 +41,7 @@ int SO_MAELSTROM ;/*mealstrom repeat (hours)*/
 /*KEY SEMAPHORE*/
 #define DUMP_KEY 42
 #define SY_KEY 1
-
+#define DUMP_KEY_SHIP 40
 /*TEST ERROR FUNCTION*/
 #define TEST_ERROR if(errno) {fprintf(stderr, \
     "%s:%d: PID=%5d: Error %d (%s)\n",\
