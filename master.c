@@ -396,7 +396,9 @@ int printDump(int dSem,struct goods_states* good_d,struct port_states* port_d,st
     int i;
     int allOffer = 1;
     int allDemand = 1;
+    sops_dump.sem_num=0;
     sops_dump.sem_op=-1;
+    sops_dump.sem_flg=0;
     semop(dSem,&sops_dump,1);
 
     printf("MERCI \n");

@@ -286,7 +286,9 @@ int generatorSupply(){
     shmPort[newGood.type-1].supplyGoods = 1;
     newGood.quantity = (SO_FILL/SO_PORTI);
 
+    sops_dump.sem_num=0;
     sops_dump.sem_op=-1;
+    sops_dump.sem_flg=0;
     semop(dumpSem,&sops_dump,1);
 
     /*if(newGood.quantity > SO_FILL-port_d[my_index].goods_offer){
@@ -345,7 +347,9 @@ void reloadExpiryDate(){
             else{
                 shmPort[i].supplyGoods= 0;
                 shmPort[i].supply.date_expiry = -1;
+                sops_dump.sem_num=0;
                 sops_dump.sem_op=-1;
+                sops_dump.sem_flg=0;
                 semop(dumpSem,&sops_dump,1);
                 good_d[i].goods_in_port -= shmPort[i].supply.quantity;
                 good_d[i].goods_expired_port += shmPort[i].supply.quantity;
