@@ -615,7 +615,7 @@ Desc: returns 0 if deallocate all resources, -1 otherwise
 */
 
 void generatorDailySupply(){
-    int num_ports;
+    int num_ports = 0;
     int i = 0;
     int index_port;
     pid_t port_insert;
@@ -623,16 +623,15 @@ void generatorDailySupply(){
     struct msgSupply msg_Supply;
     srand(time(NULL));
 
-    num_ports=(rand()%SO_PORTI)+1;
-    
+    num_ports=rand()%SO_PORTI+1;
     ports_Supply=malloc(sizeof(pid_t)*num_ports);
     while(i<num_ports){
         index_port=rand()%SO_PORTI;
         port_insert=ports[index_port].pidPort;
-        if(!port_is_present(port_insert,ports_Supply,i+1)){
+        if(!port_is_present(port_insert,ports_Supply,i)){
             ports_Supply[i]=port_insert;
             msg_Supply.pid=ports_Supply[i];
-            msg_Supply.type=(rand()%SO_MERCI)+1;
+            msg_Supply.type=rand()%SO_MERCI+1;
             msg_Supply.quantity=(SO_FILL/SO_DAYS)/num_ports;
             if(msgsnd(msg_generator_supply,&msg_Supply,sizeof(struct msgSupply)-sizeof(long)) == -1)
                 TEST_ERROR;

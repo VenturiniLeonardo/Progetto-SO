@@ -200,6 +200,8 @@ void swell(){
     posPort = rand()%SO_PORTI;
     kill(ports[posPort].pidPort,SIGUSR2);
     sops_dump.sem_op=-1;
+    sops_dump.sem_num=0;
+    sops_dump.sem_flg=0;
     semop(dumpSem,&sops_dump,1);
     port_d[getIndexFromPid(ports[posPort].pidPort)].swell = 1;
     sops_dump.sem_op=1;
@@ -222,6 +224,8 @@ void storm(){
         kill(ships_sea[index],SIGUSR2);
         /*Dump*/
         sops_dump.sem_op=-1;
+        sops_dump.sem_num=0;
+        sops_dump.sem_flg=0;
         semop(dumpSem,&sops_dump,1);
         weather_d->storm += 1;
         sops_dump.sem_op=1;
@@ -246,6 +250,8 @@ void maelstrom(){
         kill(ships_sea[randShip],SIGALRM);
         /*Dump*/
         sops_dump.sem_op=-1;
+        sops_dump.sem_num=0;
+        sops_dump.sem_flg=0;
         semop(dumpSem,&sops_dump,1);
         weather_d->maelstrom += 1;
         sops_dump.sem_op=1;
