@@ -497,7 +497,9 @@ struct port* getSupply(pid_t pid_port){
                     }
 
                     goods_on.type=type+1;
+                    sops_dump.sem_num=0;
                     sops_dump.sem_op=-1;
+                    sops_dump.sem_flg=0;
                     semop(dumpSem,&sops_dump,1);
         
 
