@@ -61,11 +61,11 @@ int main(){
     int shmShip;
     int shmWeather;
     struct sembuf sops; 
-
     if(variableUpdate()){
         printf("Error set all variable\n");
         return 0;
     }
+
     /*Shared Memory for ships*/
     if((shmShip = shmget(SHIP_POS_KEY,sizeof(struct ship_condition)*SO_NAVI,IPC_CREAT|IPC_EXCL|0666 )) == -1){
         fprintf(stderr,"Error shared memory ship creation master, %d: %s\n",errno,strerror(errno));
@@ -202,7 +202,6 @@ int main(){
         }
     }
 
-
     /*Kill all process*/ 
     
     stopWeather();
@@ -254,7 +253,7 @@ int arrContains(struct port arr[],struct coords c,int arrLen){
     for(i=0;i<arrLen;i++){
         cX=fabs(arr[i].coord.x-c.x);
         cY=fabs(arr[i].coord.y-c.y);
-        if((cX<=SO_DISTANZA) && (cY<=SO_DISTANZA)){ 
+        if((cX<=FLT_EPSILON) && (cY<=FLT_EPSILON)){ 
             contains++;
             printf("found in %d! %f %f \n",i,cX,cY);
             break;
@@ -274,11 +273,9 @@ void portGenerator(){
     struct coords myC;
     int i;
     int shmPort;
-    char x[50];
-    char y[50];
     pid_t sonPid;
     char index_port[100];
-
+    char size[100];
     if((shmPort = shmget(PORT_POS_KEY,0,0666 )) == -1){
         fprintf(stderr,"Error shared memory port creation in master, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
@@ -305,16 +302,14 @@ void portGenerator(){
     }
 
     for(i = 0;i < SO_PORTI;i++){
-        sprintf(x,"%f", ports[i].coord.x);
-        sprintf(y,"%f", ports[i].coord.y);
-
+        sprintf(size,"%d",SO_SIZE);
         sprintf(index_port, "%d", i);
         switch (sonPid = fork()){
             case -1:
                 fprintf(stderr,"Error in fork, %d: %s",errno,strerror(errno));
                 exit(EXIT_FAILURE);
             case 0:
-                if(execlp("./port","./port",index_port,NULL) == -1){
+                if(execlp("./port","./port",index_port,size,NULL) == -1){
                     fprintf(stderr,"Error in execlp port numer %d, %d: %s",i,errno,strerror(errno));
                     exit(EXIT_FAILURE);
                 }
@@ -335,8 +330,9 @@ Desc: returns 0 if it has generated all ships correctly, 1 otherwise
 void shipGenerator(){
     int i;
     int shmShip;
+    char size[50];
     pid_t sonPid;
-    
+    sprintf(size,"%d", SO_SIZE);
     if((shmShip = shmget(SHIP_POS_KEY,0,0666 )) == -1){
         fprintf(stderr,"Error shared memory shm ship creation in master (ship generator), %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
@@ -355,7 +351,7 @@ void shipGenerator(){
                 fprintf(stderr,"Error in fork , %d: %s \n",errno,strerror(errno));
                 exit(EXIT_FAILURE);
             case 0: 
-                if(execlp("./ship","./ship",NULL) == -1){
+                if(execlp("./ship","./ship",size,NULL) == -1){
                     fprintf(stderr,"Error in execl ship num %d, %d: %s \n",i,errno,strerror(errno));
                     exit(EXIT_FAILURE); 
                 }
@@ -498,9 +494,11 @@ void printFinalDump(int dSem,struct goods_states* good_d,struct port_states* por
 
     printf("\nRECORD: \n");
     printf("Il porto %d ha offerto più merce -> %d ton\n",indexMaxSupply+1,maxSupply);
-    printf("Il porto %d ha richiesto più merce -> %d ton\n",indexMaxDemand+1,maxDemand);
-
-}
+    if(indexMaxDemand != -1)
+        printf("Il porto %d ha ricevuto più merce -> %d ton\n",indexMaxDemand+1,maxDemand);
+    else  
+        printf("Nessun porto ha ricevuto merce\n");  
+}       
 
 /*
 Input: void
@@ -544,7 +542,9 @@ int variableUpdate(){
     char * value;
     FILE *f;
     int VarValue;
+    int size;
 	f= fopen("variableFile.txt", "r");
+
 
     while(fgets(buffer, 256, f) != NULL){
         variable = strtok(buffer, "=");
@@ -556,41 +556,23 @@ int variableUpdate(){
             if(SO_PORTI < 4)
                 return 1;
         }
-        if(strcmp(variable,"SO_BANCHINE")== 0)
-            SO_BANCHINE = atoi(value);
         if(strcmp(variable,"SO_FILL")== 0)
             SO_FILL = atoi(value);
-        if(strcmp(variable,"SO_LOADSPEED")== 0)
-            SO_LOADSPEED = atof(value);
         if(strcmp(variable,"SO_NAVI")== 0){
             SO_NAVI = atoi(value);
             if(SO_NAVI < 1)
                 return 1;
         }
-        if(strcmp(variable,"SO_SPEED")== 0)
-            SO_SPEED = atof(value);
-        if(strcmp(variable,"SO_CAPACITY")== 0)
-            SO_CAPACITY = atoi(value);
         if(strcmp(variable,"SO_MERCI")== 0)
             SO_MERCI = atoi(value);
-        if(strcmp(variable,"SO_SIZE")== 0)
-            SO_SIZE = atoi(value);
-        if(strcmp(variable,"SO_MIN_VITA")== 0)
-            SO_MIN_VITA = atoi(value);
-        if(strcmp(variable,"SO_MAX_VITA")== 0)
-            SO_MAX_VITA = atoi(value);
+        if(strcmp(variable,"SO_SIZE")== 0){
+            srand(getpid());
+            size=atoi(value);
+            SO_SIZE = rand()%size+1;
+        }
         if(strcmp(variable,"SO_LATO")== 0){
             SO_LATO = atof(value);
         }
-        if(strcmp(variable,"SO_STORM_DURATION") == 0){
-            SO_STORM_DURATION = atoi(value);
-        }
-        if(strcmp(variable,"SO_SWELL_DURATION") == 0){
-            SO_SWELL_DURATION = atoi(value);
-        }
-        if(strcmp(variable,"SO_MAELSTROM") == 0){
-            SO_MAELSTROM = atoi(value);
-        }    
 
     }
 
@@ -617,6 +599,7 @@ Desc: returns 0 if deallocate all resources, -1 otherwise
 void generatorDailySupply(){
     int num_ports = 0;
     int i = 0;
+    int index_prec = 0;
     int index_port;
     pid_t port_insert;
     pid_t *ports_Supply;
@@ -626,13 +609,14 @@ void generatorDailySupply(){
     num_ports=rand()%SO_PORTI+1;
     ports_Supply=malloc(sizeof(pid_t)*num_ports);
     while(i<num_ports){
+        index_prec = index_port;
         index_port=rand()%SO_PORTI;
         port_insert=ports[index_port].pidPort;
         if(!port_is_present(port_insert,ports_Supply,i)){
             ports_Supply[i]=port_insert;
             msg_Supply.pid=ports_Supply[i];
             msg_Supply.type=rand()%SO_MERCI+1;
-            msg_Supply.quantity=(SO_FILL/SO_DAYS)/num_ports;
+            msg_Supply.quantity=((SO_FILL/SO_DAYS)/num_ports)/SO_SIZE;
             if(msgsnd(msg_generator_supply,&msg_Supply,sizeof(struct msgSupply)-sizeof(long)) == -1)
                 TEST_ERROR;
             kill(ports_Supply[i],SIGALRM);

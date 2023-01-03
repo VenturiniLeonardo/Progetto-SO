@@ -81,6 +81,8 @@ int main(int argc,char*argv[]){
     quantityDemand = 0;
     quantitySupply = 0;
     my_index=atoi(argv[1]);
+    SO_SIZE = atoi(argv[2]);
+
     if(variableUpdate()){
         printf("Error set all variable\n");
         return 0;
@@ -150,7 +152,7 @@ int main(int argc,char*argv[]){
     if((shmShip = shmget(SHIP_POS_KEY,0,0666)) == -1){
         TEST_ERROR;
     }
-    ships =shmat(shmShip,NULL,0);
+    ships =shmat(shmShip,NULL,SHM_RDONLY);
 
     /*MSG queue for generator daily supply */
     if((msg_generator_supply = msgget(getppid(),0666)) == -1){
@@ -210,29 +212,29 @@ void generatorDailySupply(){
     struct sembuf sops;
     struct sembuf sops_dump;
     msgrcv(msg_generator_supply,&msg_Supply,sizeof(struct msgSupply)-sizeof(long),getpid(),0);
-    
-    if((semSupply=semget(getpid()*2,1,0666))==-1)
-        TEST_ERROR;
 
+    if((semSupply=semget(getpid()*2,1,0666))==-1){
+        TEST_ERROR;
+    }
     sops.sem_num=0;
     sops.sem_op=-1;
     sops.sem_flg=0;
     semop(semSupply,&sops,1);
-    if(shmPort[msg_Supply.type-1].demandGoods==0){
+    sops_dump.sem_num=0;
+    sops_dump.sem_op=-1;
+    sops_dump.sem_flg=0;
+    semop(dumpSem,&sops_dump,1);
+    if(shmPort[msg_Supply.type-1].demandGoods==0 && port_d[my_index].goods_offer+msg_Supply.quantity*SO_SIZE<=SO_FILL){
         shmPort[msg_Supply.type-1].supplyGoods=1;
         shmPort[msg_Supply.type-1].supply.type=msg_Supply.type;
         shmPort[msg_Supply.type-1].supply.quantity=msg_Supply.quantity;
         srand(getpid());
         shmPort[msg_Supply.type-1].supply.date_expiry=(rand()%(SO_MAX_VITA-SO_MIN_VITA+1))+SO_MIN_VITA;
-        sops_dump.sem_num=0;
-        sops_dump.sem_op=-1;
-        sops_dump.sem_flg=0;
-        semop(dumpSem,&sops_dump,1);
-        good_d[msg_Supply.type-1].goods_in_port += msg_Supply.quantity;
-        port_d[my_index].goods_offer += msg_Supply.quantity;
-        sops_dump.sem_op=1;
-        semop(dumpSem,&sops_dump,1);
+        good_d[msg_Supply.type-1].goods_in_port += msg_Supply.quantity*SO_SIZE;
+        port_d[my_index].goods_offer += msg_Supply.quantity*SO_SIZE;
     }
+    sops_dump.sem_op=1;
+    semop(dumpSem,&sops_dump,1);
     sops.sem_op=1;
     semop(semSupply,&sops,1);
 }
@@ -275,15 +277,15 @@ int generatorSupply(){
     newGood.type = (rand() % SO_MERCI)+1;
 
     shmPort[newGood.type-1].supplyGoods = 1;
-    newGood.quantity = (SO_FILL/SO_PORTI);
+    newGood.quantity = (SO_FILL/SO_PORTI)/SO_SIZE;
 
     sops_dump.sem_num=0;
     sops_dump.sem_op=-1;
     sops_dump.sem_flg=0;
     semop(dumpSem,&sops_dump,1);
 
-    good_d[newGood.type-1].goods_in_port += newGood.quantity;
-    port_d[my_index].goods_offer+=newGood.quantity;
+    good_d[newGood.type-1].goods_in_port += newGood.quantity*SO_SIZE;
+    port_d[my_index].goods_offer+=newGood.quantity*SO_SIZE;
     sops_dump.sem_op=1;
     semop(dumpSem,&sops_dump,1);
 
@@ -336,8 +338,8 @@ void reloadExpiryDate(){
                 sops_dump.sem_op=-1;
                 sops_dump.sem_flg=0;
                 semop(dumpSem,&sops_dump,1);
-                good_d[i].goods_in_port -= shmPort[i].supply.quantity;
-                good_d[i].goods_expired_port += shmPort[i].supply.quantity;
+                good_d[i].goods_in_port -= shmPort[i].supply.quantity*SO_SIZE;
+                good_d[i].goods_expired_port += shmPort[i].supply.quantity*SO_SIZE;
                 sops_dump.sem_op=1;
                 semop(dumpSem,&sops_dump,1);
             }
@@ -387,8 +389,7 @@ int generatorDemand(){
     }
 
     shmPort[msg.type-1].demandGoods = 1;
-    msg.quantity =  (SO_FILL/SO_PORTI);
-    quantityDemand += msg.quantity;
+    msg.quantity =  (SO_FILL/SO_PORTI)/SO_SIZE;
     
     if(sndDemand = msgsnd(mqDemand,&msg,sizeof(int),IPC_NOWAIT) == -1){
         fprintf(stderr,"Error send messagge queue demand port, %d: %s\n",errno,strerror(errno));
@@ -400,7 +401,7 @@ int generatorDemand(){
     sops_dump.sem_op=-1;
     sops_dump.sem_flg=0;
     semop(dumpSem,&sops_dump,1);
-    port_d[my_index].goods_demand += msg.quantity; 
+    port_d[my_index].goods_demand += msg.quantity*SO_SIZE; 
     sops_dump.sem_op=1;
     semop(dumpSem,&sops_dump,1);
 
@@ -577,8 +578,6 @@ int variableUpdate(){
     while(fgets(buffer, 256, f) != NULL){
         variable = strtok(buffer, "=");
         value = strtok(NULL, "=");
-        if(strcmp(variable,"SO_DAYS") == 0)
-            SO_DAYS = atoi(value);
         if(strcmp(variable,"SO_PORTI")== 0){
             SO_PORTI = atoi(value);
             if(SO_PORTI < 4)
@@ -588,17 +587,11 @@ int variableUpdate(){
             SO_BANCHINE = atoi(value);
         if(strcmp(variable,"SO_FILL")== 0)
             SO_FILL = atoi(value);
-        if(strcmp(variable,"SO_LOADSPEED")== 0)
-            SO_LOADSPEED = atof(value);
         if(strcmp(variable,"SO_NAVI")== 0){
             SO_NAVI = atoi(value);
             if(SO_NAVI < 1)
                 return 1;
         }
-        if(strcmp(variable,"SO_SPEED")== 0)
-            SO_SPEED = atof(value);
-        if(strcmp(variable,"SO_CAPACITY")== 0)
-            SO_CAPACITY = atoi(value);
         if(strcmp(variable,"SO_MERCI")== 0)
             SO_MERCI = atoi(value);
         if(strcmp(variable,"SO_SIZE")== 0)
@@ -607,18 +600,9 @@ int variableUpdate(){
             SO_MIN_VITA = atoi(value);
         if(strcmp(variable,"SO_MAX_VITA")== 0)
             SO_MAX_VITA = atoi(value);
-        if(strcmp(variable,"SO_LATO")== 0){
-            SO_LATO = atof(value);
-        }
-        if(strcmp(variable,"SO_STORM_DURATION") == 0){
-            SO_STORM_DURATION = atoi(value);
-        }
         if(strcmp(variable,"SO_SWELL_DURATION") == 0){
             SO_SWELL_DURATION = atoi(value);
         }
-        if(strcmp(variable,"SO_MAELSTROM") == 0){
-            SO_MAELSTROM = atoi(value);
-        }    
 
     }
 

@@ -69,7 +69,7 @@ int main(){
         fprintf(stderr,"Error shared memory creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
-    ports = (struct port*) shmat(shmPort,NULL,0);
+    ports = (struct port*) shmat(shmPort,NULL,SHM_RDONLY);
 
     if (ports == (void *) -1){
         fprintf(stderr,"Error assing ports to shared memory, %d: %s\n",errno,strerror(errno));
@@ -82,7 +82,7 @@ int main(){
         exit(EXIT_FAILURE);
     }
 
-    ships = (struct ship_condition *) shmat(shmShip,NULL,0);
+    ships = (struct ship_condition *) shmat(shmShip,NULL,SHM_RDONLY);
     
     if (ships == (void *) -1){
         fprintf(stderr,"Error assing ships to shared memory, %d: %s\n",errno,strerror(errno));
@@ -288,44 +288,15 @@ int variableUpdate(){
     while(fgets(buffer, 256, f) != NULL){
         variable = strtok(buffer, "=");
         value = strtok(NULL, "=");
-        if(strcmp(variable,"SO_DAYS") == 0)
-            SO_DAYS = atoi(value);
         if(strcmp(variable,"SO_PORTI")== 0){
             SO_PORTI = atoi(value);
             if(SO_PORTI < 4)
                 return 1;
         }
-        if(strcmp(variable,"SO_BANCHINE")== 0)
-            SO_BANCHINE = atoi(value);
-        if(strcmp(variable,"SO_FILL")== 0)
-            SO_FILL = atoi(value);
-        if(strcmp(variable,"SO_LOADSPEED")== 0)
-            SO_LOADSPEED = atof(value);
         if(strcmp(variable,"SO_NAVI")== 0){
             SO_NAVI = atoi(value);
             if(SO_NAVI < 1)
                 return 1;
-        }
-        if(strcmp(variable,"SO_SPEED")== 0)
-            SO_SPEED = atof(value);
-        if(strcmp(variable,"SO_CAPACITY")== 0)
-            SO_CAPACITY = atoi(value);
-        if(strcmp(variable,"SO_MERCI")== 0)
-            SO_MERCI = atoi(value);
-        if(strcmp(variable,"SO_SIZE")== 0)
-            SO_SIZE = atoi(value);
-        if(strcmp(variable,"SO_MIN_VITA")== 0)
-            SO_MIN_VITA = atoi(value);
-        if(strcmp(variable,"SO_MAX_VITA")== 0)
-            SO_MAX_VITA = atoi(value);
-        if(strcmp(variable,"SO_LATO")== 0){
-            SO_LATO = atof(value);
-        }
-        if(strcmp(variable,"SO_STORM_DURATION") == 0){
-            SO_STORM_DURATION = atoi(value);
-        }
-        if(strcmp(variable,"SO_SWELL_DURATION") == 0){
-            SO_SWELL_DURATION = atoi(value);
         }
         if(strcmp(variable,"SO_MAELSTROM") == 0){
             SO_MAELSTROM = atoi(value);
@@ -350,3 +321,10 @@ void deallocateResources(){
     shmdt(weather_d);
 
 }  
+
+
+
+
+
+
+

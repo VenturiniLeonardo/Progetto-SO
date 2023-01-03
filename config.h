@@ -25,9 +25,7 @@ double SO_LATO ;  /*side of the map (double)*/
 int SO_STORM_DURATION ;/*duration of storm (hours)*/
 int SO_SWELL_DURATION ;/*duration of swell (hours)*/
 int SO_MAELSTROM ;/*mealstrom repeat (hours)*/
-
-#define SO_DISTANZA 0.0001   /*minimum distance between two ports*/
-
+ 
 /*KEY SHARE MEMORY*/
 #define PORT_POS_KEY 57 /*key for shared memory contains array coords*/
 #define SHIP_POS_KEY 13
