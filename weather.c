@@ -29,6 +29,7 @@ struct port *ports;
 struct ship_condition * ships;
 pid_t * ship_in_sea;
 int dumpSem;
+int dump_sem_ship;
 struct weather_states* weather_d;
 struct port_states *port_d;
 int end = 1;
@@ -75,12 +76,17 @@ int main(){
         fprintf(stderr,"Error assing ports to shared memory, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
-
+    /*Sy Ship*/
+    if((dump_sem_ship = semget(DUMP_KEY_SHIP,1,0666)) == -1){
+        fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
     /*SHM Ship*/
     if((shmShip = shmget(SHIP_POS_KEY,0,0666)) == -1){
         fprintf(stderr,"Error shared memory ship creation weather, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
+
 
     ships = (struct ship_condition *) shmat(shmShip,NULL,SHM_RDONLY);
     
@@ -116,7 +122,7 @@ int main(){
 
     /*Semaphore for sync*/
     if((sySem = semget(SY_KEY,1,0666)) == -1){
-        fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
+            fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
 
@@ -168,7 +174,13 @@ pid_t * ships_in_sea(int* length){
     int i;
     pid_t *ships_sea;
     int j = 0;
+    struct sembuf ship_dump;
     ships_sea=(pid_t*)malloc(sizeof(pid_t));
+
+    ship_dump.sem_op=-1;
+    ship_dump.sem_num=0;
+    ship_dump.sem_flg=0;
+    semop(dump_sem_ship,&ship_dump,1);
 
     for(i=0;i<SO_NAVI;i++){
         if(ships[i].ship != 0 && ships[i].port == 0){
@@ -178,6 +190,9 @@ pid_t * ships_in_sea(int* length){
             ships_sea=(pid_t*)realloc(ships_sea,(j+1)*sizeof(pid_t));
         }
     }
+
+    ship_dump.sem_op=1;
+    semop(dump_sem_ship,&ship_dump,1);
 
     *length = j;
     if(j == 0)
@@ -221,7 +236,7 @@ void storm(){
     if(length != 0){
         srand(time(NULL));
         index=rand()%length;
-        kill(ships_sea[index],SIGUSR2);
+        /*kill(ships_sea[index],SIGUSR2);*/
         /*Dump*/
         sops_dump.sem_op=-1;
         sops_dump.sem_num=0;
@@ -247,7 +262,7 @@ void maelstrom(){
     srand(time(NULL));
     if(ships_sea != NULL){
         randShip=rand()%length;    
-        kill(ships_sea[randShip],SIGALRM);
+        /*kill(ships_sea[randShip],SIGALRM);*/
         /*Dump*/
         sops_dump.sem_op=-1;
         sops_dump.sem_num=0;
