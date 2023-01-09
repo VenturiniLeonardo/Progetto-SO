@@ -25,6 +25,7 @@ void deallocateResources();
 pid_t * ships_in_sea(int*);
 int getIndexFromPid(pid_t);
 
+/*Global variables*/
 struct port *ports;
 struct ship_condition * ships;
 pid_t * ship_in_sea;

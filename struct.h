@@ -1,4 +1,3 @@
-
 typedef struct{
     unsigned short sem_num;
     short sem_op;

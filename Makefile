@@ -1,15 +1,9 @@
 ########################################################################
-####################### Makefile Template ##############################
+###############################Makefile ################################
 ########################################################################
-
-# Compiler settings - Can be customized.
 CC=gcc
 CFLAGS=-std=c89 -Wpedantic -D_POSIX_C_SOURCE=199309L -D_GNU_SOURCE
 LIBS = -lm
-
-########################################################################
-####################### Targets beginning here #########################
-########################################################################
 
 all: master.o port.o ship.o weather.o 
 	$(CC)  ship.o -o ship $(LIBS)
@@ -31,11 +25,11 @@ weather.o :
 	$(CC) $(CFLAGS) -c weather.c
 
 clean:
+	ipcrm -a
 	rm -f *.o
 	rm port
 	rm ship
 	rm master
-	ipcrm -a
 
 run:
 	./master

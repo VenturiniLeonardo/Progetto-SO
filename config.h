@@ -34,6 +34,7 @@ int SO_MAELSTROM ;/*mealstrom repeat (hours)*/
 #define SHIP_DUMP_KEY 35
 #define WEATHER_DUMP_KEY 7
 #define GOODS_INFO_KEY 11
+
 /*KEY MESSAGGE QUEUES*/
 #define PORT_MASTER_KEY 23 /*key for shared memory contains array coords*/
 
@@ -42,6 +43,9 @@ int SO_MAELSTROM ;/*mealstrom repeat (hours)*/
 #define SY_KEY 1
 #define SHIP_KEY 40
 #define MUTEX_DOCK 10
+
+
+
 
 /*TEST ERROR FUNCTION*/
 #define TEST_ERROR if(errno) {fprintf(stderr, \

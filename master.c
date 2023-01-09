@@ -23,7 +23,7 @@ void portGenerator();
 void shipGenerator();
 void goodsInfoGenerator();
 void weatherGenerator();
-int deallocateResources(struct goods_states *,struct port_states *,struct ship_dump *,struct weather_states * );
+void deallocateResources(struct goods_states *,struct port_states *,struct ship_dump *,struct weather_states * );
 int genRandInt(int,int);
 int printDump(int,struct goods_states *,struct port_states *,struct ship_dump *,struct weather_states * );
 void printFinalDump(struct goods_states *,struct port_states *,struct ship_dump *,struct weather_states * );
@@ -112,6 +112,8 @@ int main(){
         fprintf(stderr,"Error initializing semaphore, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
+
+    /*Sem for ship*/
     if((dSem_ship = semget(SHIP_KEY,1,IPC_CREAT|IPC_EXCL|0666)) == -1){
         fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
@@ -133,6 +135,7 @@ int main(){
         TEST_ERROR;
     }
 
+    /*Shared memory initialization*/
     for(i=0;i++;i<SO_MERCI){
         struct_goods_dump[i].goods_delivered = 0;
         struct_goods_dump[i].goods_expired_port = 0;
@@ -143,7 +146,6 @@ int main(){
 
    
     /*Shared memory for dump of port*/
-
     if((shm_dump_port=shmget(PORT_DUMP_KEY,sizeof(struct port_states)*SO_PORTI,IPC_CREAT |IPC_EXCL|0666)) == -1){
         fprintf(stderr,"Error shared memory port dump creation in master, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
@@ -165,7 +167,7 @@ int main(){
         TEST_ERROR;
     }
 
-
+    /*Shared memory initialization*/
     struct_ship_dump->ship_sea_goods = 0;
     struct_ship_dump->ship_in_port = 0;
     struct_ship_dump->ship_sea_no_goods = SO_NAVI;
@@ -186,21 +188,19 @@ int main(){
     if (weather_d == (void *) -1){
         TEST_ERROR;
     }
-        
-    if (weather_d == (void *) -1){
-        TEST_ERROR;
-    }
+
+    /*Shared memory initialization*/
     weather_d->maelstrom = 0;
     weather_d->storm = 0;
     
-    /*PORT AND SHIP*/
+    /*GOODS INFO, PORT, SHIP and WEATHER*/
     goodsInfoGenerator();
     portGenerator();
     shipGenerator();
     weatherGenerator();
 
 
-
+    /*waiting for synchronization*/
     sops.sem_num=0;
     sops.sem_op=-1;
     sops.sem_flg=0;
@@ -211,9 +211,9 @@ int main(){
 
     printf("START...\n");
     
-    /*elapsed days*/
     elapsedDays=0; 
 
+    /*days and dump management*/
     while(elapsedDays<SO_DAYS){
         generatorDailySupply();
         sleep(1);
@@ -232,7 +232,9 @@ int main(){
     stopWeather();
     stopAllShips();
     killAllPorts();
+
     printFinalDump(struct_goods_dump,struct_port_dump,struct_ship_dump,weather_d);
+
     deallocateResources(struct_goods_dump,struct_port_dump,struct_ship_dump,weather_d);
 
     return 0;
@@ -280,7 +282,6 @@ int arrContains(struct port arr[],struct coords c,int arrLen){
         cY=fabs(arr[i].coord.y-c.y);
         if((cX<=FLT_EPSILON) && (cY<=FLT_EPSILON)){ 
             contains++;
-            printf("found in %d! %f %f \n",i,cX,cY);
             break;
         }
     }
@@ -290,11 +291,10 @@ int arrContains(struct port arr[],struct coords c,int arrLen){
 
 /*
 Input: void
-Output: int
-Desc: returns 0 if it has generated all ports correctly, -1 otherwise
+Output: void
+Desc: Generation all SO_PORTI ports
 */
 void portGenerator(){
-
     struct coords myC;
     int i;
     int shmPort;
@@ -316,7 +316,8 @@ void portGenerator(){
     ports[2].coord.y = SO_LATO;
     ports[3].coord.x = SO_LATO; 
     ports[3].coord.y = 0;
-    /*generating SO_PORTI-4 ports*/
+
+    /*generating SO_PORTI-4 coordinates*/
     srand(time(NULL));
     for (i=4;i<SO_PORTI;i++){  
         do{
@@ -324,7 +325,7 @@ void portGenerator(){
         }while(arrContains(ports,myC,i));
         ports[i].coord=myC;
     }
-
+    /*Fork*/
     for(i = 0;i < SO_PORTI;i++){
         sprintf(index_port, "%d", i);
         switch (sonPid = fork()){
@@ -339,7 +340,6 @@ void portGenerator(){
             break;
             default:
                 ports[i].pidPort = sonPid;
-                printf("%d %f %f\n",sonPid,ports[i].coord.x,ports[i].coord.y);
             break;
         }
     }
@@ -347,8 +347,8 @@ void portGenerator(){
 
 /*
 Input: void
-Output: int
-Desc: returns 0 if it has generated all ships correctly, 1 otherwise
+Output: void
+Desc: Generation all SO_NAVI ships
 */
 void shipGenerator(){
     int i;
@@ -365,6 +365,7 @@ void shipGenerator(){
         TEST_ERROR;
     }
     
+    /*Fork*/
     for(i=0;i<SO_NAVI;i++){ 
         switch(sonPid=fork()){
             case -1:
@@ -384,6 +385,11 @@ void shipGenerator(){
     }
 }
 
+/*
+Input: void
+Output: void
+Desc: Generation weather
+*/
 void weatherGenerator(){
     int sonPid;
     switch (sonPid=fork()){
@@ -403,9 +409,9 @@ void weatherGenerator(){
 }
 
 /*
-Input: void
+Input: int, struct goods_states*, struct port_states*, struct ship_dump*, struct weather_state*
 Output: int
-Desc: returns 0 if deallocate all resources, -1 otherwise 
+Desc: returns zero if there are no pressure switches for termination, 1 otherwise
 */
 int printDump(int dSem, struct goods_states* good_d,struct port_states* port_d,struct ship_dump* ship_d,struct weather_states * weather_d){
     struct sembuf sops_dump;
@@ -459,6 +465,11 @@ int printDump(int dSem, struct goods_states* good_d,struct port_states* port_d,s
     return allOffer == 1 || allDemand == 1 || weather_d->maelstrom == SO_NAVI;
 }
 
+/*
+Input: int, struct goods_states*, struct port_states*, struct ship_dump*, struct weather_state*
+Output: void
+Desc: printf final dump
+*/
 
 void printFinalDump(struct goods_states* good_d,struct port_states* port_d,struct ship_dump* ship_d,struct weather_states * weather_d){
     int i;
@@ -524,10 +535,9 @@ void printFinalDump(struct goods_states* good_d,struct port_states* port_d,struc
 
 /*
 Input: void
-Output: int
-Desc: returns 0 if deallocate all resources, -1 otherwise 
+Output: void
+Desc: send a signal to all ports to indicate termination
 */
-
 void killAllPorts(){
     int i;
     for(i = 0 ; i< SO_PORTI;i++){
@@ -537,10 +547,9 @@ void killAllPorts(){
 
 /*
 Input: void
-Output: int    printf("in %d\n",SO_FILL);
-Desc: returns 0 if deallocate all resources, -1 otherwise 
+Output: void
+Desc: send a signal to all ships to indicate termination
 */
-
 void stopAllShips(){
     int i;
     for(i = 0; i< SO_NAVI;i++){
@@ -549,15 +558,20 @@ void stopAllShips(){
     }
 }
 
+/*
+Input: void
+Output: void
+Desc: send a signal to weather to indicate termination
+*/
 void stopWeather(struct weather_states * weather_d){
     kill(weatherPid,SIGTERM);
 }
+
 /*
 Input: void
 Output: int
-Desc: returns 0 if deallocate all resources, -1 otherwise 
+Desc: returns 0 if variable loading has been performed, 1 otherwise
 */
-
 int variableUpdate(){
     char buffer[256];
 	char *variable;
@@ -596,14 +610,17 @@ int variableUpdate(){
         if(strcmp(variable,"SO_LATO")== 0){
             SO_LATO = atof(value);
         }
-
     }
 
 	fclose(f);
     return 0;
 }
 
-
+/*
+Input: pid_t, pid_t*,int
+Output: int
+Desc: returns 1 if pid ports exits in present in array of pid, 0 otherwise
+*/
 int port_is_present(pid_t ports_insert,pid_t *ports_Supply,int ports_in){
     int i;
     for(i=0;i<ports_in;i++){
@@ -618,11 +635,13 @@ int port_is_present(pid_t ports_insert,pid_t *ports_Supply,int ports_in){
 /*
 Input: void
 Output: void
-Desc:
+Desc: generates parameters for each type of goods
 */
 void goodsInfoGenerator(){
     int shmGood;
     int i;
+
+    /*Shared memory goods info*/
     if((shmGood = shmget(GOODS_INFO_KEY,sizeof(struct good_info) * SO_MERCI ,IPC_CREAT | IPC_EXCL | 0666)) == -1)
         TEST_ERROR;
     
@@ -641,10 +660,9 @@ void goodsInfoGenerator(){
 
 /*
 Input: void
-Output: int
-Desc: returns 0 if deallocate all resources, -1 otherwise 
+Output: void
+Desc: select a random number of random ports and send a signal with a message to indicate the amount to be generated
 */
-
 void generatorDailySupply(){
     int num_ports = 0;
     int i = 0;
@@ -674,31 +692,31 @@ void generatorDailySupply(){
     }
     free(ports_Supply);
 }
+
 /*
 Input: void
-Output: int
-Desc: returns 0 if deallocate all resources, -1 otherwise 
+Output: void
+Desc: send a signal to ships and ports to update the expiration date of the goods
 */
-
 void updateDateExpiry(){
     int i;
     for(i = 0; i< SO_PORTI;i++){
         kill(ports[i].pidPort,SIGUSR1);
     }
-    /*
+    
     for(i = 0;i<SO_NAVI;i++){
         if(ships[i].ship != 0)
             kill(ships[i].ship,SIGUSR1);
-    }*/
+    }
 
 }
 
 /*
-Input: void
-Output: int
-Desc: returns 0 if deallocate all resources, -1 otherwise 
+Input: struct goods_states* ,struct port_states* ,struct ship_dump* ,struct weather_states * 
+Output: void
+Desc: deallocate all resources
 */
-int deallocateResources(struct goods_states* good_d,struct port_states* port_d,struct ship_dump* ship_d,struct weather_states * weather_d){
+void deallocateResources(struct goods_states* good_d,struct port_states* port_d,struct ship_dump* ship_d,struct weather_states * weather_d){
 
     int sySem;
     int shmPort;
@@ -840,7 +858,6 @@ int deallocateResources(struct goods_states* good_d,struct port_states* port_d,s
     if((shm_goods_info = shmctl(shm_goods_info,IPC_RMID,NULL)) == -1)
         TEST_ERROR;
 
-    return 0;
 
 }
 
