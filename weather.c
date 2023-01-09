@@ -25,15 +25,16 @@ void deallocateResources();
 pid_t * ships_in_sea(int*);
 int getIndexFromPid(pid_t);
 
+/*Global variables*/
 struct port *ports;
 struct ship_condition * ships;
 pid_t * ship_in_sea;
 int dumpSem;
+int sem_ship;
 struct weather_states* weather_d;
 struct port_states *port_d;
-int end = 1;
 
-/*Handler*/
+/*Handler for SIGUSR1 and SIGTERM*/
 void signalHandler(int signal){
     switch(signal){
         case SIGUSR1:
@@ -75,12 +76,17 @@ int main(){
         fprintf(stderr,"Error assing ports to shared memory, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
-
+    /*Sy Ship*/
+    if((sem_ship = semget(SHIP_KEY,1,0666)) == -1){
+        fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
     /*SHM Ship*/
     if((shmShip = shmget(SHIP_POS_KEY,0,0666)) == -1){
         fprintf(stderr,"Error shared memory ship creation weather, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
+
 
     ships = (struct ship_condition *) shmat(shmShip,NULL,SHM_RDONLY);
     
@@ -116,10 +122,11 @@ int main(){
 
     /*Semaphore for sync*/
     if((sySem = semget(SY_KEY,1,0666)) == -1){
-        fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
+            fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
 
+    /*Setup handler*/
     bzero(&sa, sizeof(sa));
     sa.sa_handler = signalHandler;
     sa.sa_flags=SA_RESTART|SA_NODEFER;
@@ -128,6 +135,7 @@ int main(){
 
     sigemptyset(&mask);
 
+    /*waiting for synchronization*/
     sops.sem_num=0;
     sops.sem_op=-1;
     sops.sem_flg=0;
@@ -153,23 +161,28 @@ int main(){
             }
         }
         maelstrom();
-    }while(end);
+    }while(1);
 
     return 0;
 }
 /*Functions definitions*/
 
 /*
-Input: void
+Input: int*
 Output: int
-Desc:
+Desc: Given an input number returns an array containing the pids of the ships at sea
 */
 pid_t * ships_in_sea(int* length){
     int i;
     pid_t *ships_sea;
     int j = 0;
-    ships_sea=(pid_t*)malloc(sizeof(pid_t));
-
+    struct sembuf ship_dump;
+    ships_sea=(pid_t*)malloc(sizeof(pid_t));  
+    ship_dump.sem_op=-1;
+    ship_dump.sem_num=0;
+    ship_dump.sem_flg=0;
+    semop(sem_ship,&ship_dump,1);
+          
     for(i=0;i<SO_NAVI;i++){
         if(ships[i].ship != 0 && ships[i].port == 0){
             ships_sea[j] = ships[i].ship;
@@ -178,6 +191,9 @@ pid_t * ships_in_sea(int* length){
             ships_sea=(pid_t*)realloc(ships_sea,(j+1)*sizeof(pid_t));
         }
     }
+
+    ship_dump.sem_op=1;
+    semop(sem_ship,&ship_dump,1);
 
     *length = j;
     if(j == 0)
@@ -190,8 +206,8 @@ pid_t * ships_in_sea(int* length){
 
 /*
 Input: void
-Output: int
-Desc:
+Output: void
+Desc: Given a random port sends a SIGURS2 signal 
 */
 void swell(){
     int posPort;
@@ -210,8 +226,8 @@ void swell(){
 
 /*
 Input: void
-Output: int
-Desc:
+Output: void
+Desc: Select a ship at sea from an array and send a SIGURS2 signal
 */
 void storm(){
     int index;
@@ -222,6 +238,7 @@ void storm(){
         srand(time(NULL));
         index=rand()%length;
         kill(ships_sea[index],SIGUSR2);
+
         /*Dump*/
         sops_dump.sem_op=-1;
         sops_dump.sem_num=0;
@@ -236,8 +253,8 @@ void storm(){
 
 /*
 Input: void
-Output: int
-Desc:
+Output: void
+Desc: Select a ship at sea from an array and send a SIGALRM signal
 */
 void maelstrom(){
     int randShip;
@@ -246,8 +263,9 @@ void maelstrom(){
     pid_t *ships_sea = ships_in_sea(&length);
     srand(time(NULL));
     if(ships_sea != NULL){
-        randShip=rand()%length;    
+        randShip=rand()%length;  
         kill(ships_sea[randShip],SIGALRM);
+
         /*Dump*/
         sops_dump.sem_op=-1;
         sops_dump.sem_num=0;
@@ -261,9 +279,9 @@ void maelstrom(){
 }
 
 /*
-Input: void
+Input: pid_t
 Output: int
-Desc: returns 0 if deallocate all resources, -1 otherwise 
+Desc: given a pid returns the position in the array
 */
 int getIndexFromPid(pid_t pidPort){
     int i;
@@ -275,7 +293,7 @@ int getIndexFromPid(pid_t pidPort){
 /*
 Input: void
 Output: int
-Desc: returns 0 if deallocate all resources, -1 otherwise 
+Desc: returns 0 if variable loading has been performed, 1 otherwise
 */
 int variableUpdate(){
     char buffer[256];
@@ -310,8 +328,8 @@ int variableUpdate(){
 
 /*
 Input: void
-Output: int
-Desc: returns 0 if deallocate all resources, -1 otherwise 
+Output: void
+Desc: detach shared memory
 */
 void deallocateResources(){
 

@@ -1,4 +1,3 @@
-
 typedef struct{
     unsigned short sem_num;
     short sem_op;
@@ -71,3 +70,9 @@ typedef struct weather_states{
     int storm;
     int maelstrom;
 }struct_weather_states;
+
+
+typedef struct good_info{
+    int size;
+    int life;
+}struct_good_info;
