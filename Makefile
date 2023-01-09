@@ -25,7 +25,6 @@ weather.o :
 	$(CC) $(CFLAGS) -c weather.c
 
 clean:
-	ipcrm -a
 	rm -f *.o
 	rm port
 	rm ship
