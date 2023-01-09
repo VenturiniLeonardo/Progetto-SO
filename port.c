@@ -477,23 +477,23 @@ Desc: deallocate all resources
 
 void stop_ships(){
     int i;
-    int dump_sem_ship;
+    int sem_ship;
     struct sembuf ship_dump;
     pid_t port_pid=getpid();
-    if((dump_sem_ship = semget(DUMP_KEY_SHIP,1,0666)) == -1){
+    if((sem_ship = semget(SHIP_KEY,1,0666)) == -1){
         exit(EXIT_FAILURE);
     }
     ship_dump.sem_op=-1;
     ship_dump.sem_num=0;
     ship_dump.sem_flg=0;
-    semop(dump_sem_ship,&ship_dump,1);
+    semop(sem_ship,&ship_dump,1);
     for(i=0;i<SO_NAVI;i++){
         if(ships[i].port==port_pid){
-            /*kill(ships[i].ship,SIGPROF);*/
+            kill(ships[i].ship,SIGPROF);
         }
     }
     ship_dump.sem_op=1;
-    semop(dump_sem_ship,&ship_dump,1);
+    semop(sem_ship,&ship_dump,1);
 }
 
 /*

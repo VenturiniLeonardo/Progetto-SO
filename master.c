@@ -25,7 +25,7 @@ void goodsInfoGenerator();
 void weatherGenerator();
 int deallocateResources(struct goods_states *,struct port_states *,struct ship_dump *,struct weather_states * );
 int genRandInt(int,int);
-int printDump(int,int,struct goods_states *,struct port_states *,struct ship_dump *,struct weather_states * );
+int printDump(int,struct goods_states *,struct port_states *,struct ship_dump *,struct weather_states * );
 void printFinalDump(struct goods_states *,struct port_states *,struct ship_dump *,struct weather_states * );
 void killAllPorts();
 void updateDateExpiry();
@@ -35,6 +35,7 @@ void stopWeather();
 void generatorDailySupply();
 int port_is_present(pid_t,pid_t*,int);
 
+/*Global variables*/
 struct port *ports;
 struct ship_condition * ships;
 pid_t weatherPid;
@@ -62,6 +63,7 @@ int main(){
     int dSem;
     int shmShip;
     int shmWeather;
+    int mutexDocking;
     struct sembuf sops; 
 
     if(variableUpdate()){
@@ -86,6 +88,13 @@ int main(){
         fprintf(stderr,"Error initializing semaphore, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
+    /*Semaphore mutex docking*/
+    if((mutexDocking = semget(MUTEX_DOCK,1,IPC_CREAT|IPC_EXCL|0666)) == -1){
+        TEST_ERROR;
+    }
+    if((mutexDocking=semctl(mutexDocking,0,SETVAL,1)) == -1){
+        TEST_ERROR;
+    }
 
     /*Shared memory for ports*/
     if((shmPort = shmget(PORT_POS_KEY,sizeof(struct port)*SO_PORTI,IPC_CREAT|IPC_EXCL|0666 )) == -1){
@@ -103,7 +112,7 @@ int main(){
         fprintf(stderr,"Error initializing semaphore, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
-    if((dSem_ship = semget(DUMP_KEY_SHIP,1,IPC_CREAT|IPC_EXCL|0666)) == -1){
+    if((dSem_ship = semget(SHIP_KEY,1,IPC_CREAT|IPC_EXCL|0666)) == -1){
         fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
@@ -211,7 +220,7 @@ int main(){
         kill(weatherPid,SIGUSR1);
         printf("Day %d\n",elapsedDays+1);
         updateDateExpiry();
-        if(printDump(dSem,dSem_ship,struct_goods_dump,struct_port_dump,struct_ship_dump,weather_d)){
+        if(printDump(dSem,struct_goods_dump,struct_port_dump,struct_ship_dump,weather_d)){
             printf("Offerta / richiesta / navi pari a zero.... Terminazione\n");
             elapsedDays = SO_DAYS;
         }else{
@@ -398,7 +407,7 @@ Input: void
 Output: int
 Desc: returns 0 if deallocate all resources, -1 otherwise 
 */
-int printDump(int dSem,int dSem_ship, struct goods_states* good_d,struct port_states* port_d,struct ship_dump* ship_d,struct weather_states * weather_d){
+int printDump(int dSem, struct goods_states* good_d,struct port_states* port_d,struct ship_dump* ship_d,struct weather_states * weather_d){
     struct sembuf sops_dump;
     struct sembuf sops_ship;
     int i;
@@ -430,7 +439,11 @@ int printDump(int dSem,int dSem_ship, struct goods_states* good_d,struct port_st
         printf("- Banchine occupate %d\n",port_d[i].dock_occuped);
         printf("- Banchine totali %d\n",port_d[i].dock_total);
     }
-    
+    printf("\nNAVI: \n");
+    printf("- Navi in porto %d\n",ship_d->ship_in_port);
+    printf("- Navi in mare con carico %d\n",ship_d->ship_sea_goods);
+    printf("- Navi in mare senza carico %d\n",ship_d->ship_sea_no_goods);
+
     printf("\nMETEO: \n");
     printf("- Navi colpite dalla tempesta %d\n",weather_d->storm);
     printf("- Navi affondate dal Maelstrom %d\n",weather_d->maelstrom);
@@ -441,16 +454,6 @@ int printDump(int dSem,int dSem_ship, struct goods_states* good_d,struct port_st
     sops_dump.sem_op=1;
     semop(dSem,&sops_dump,1);
 
-    sops_ship.sem_op=-1;
-    sops_ship.sem_num = 0;
-    sops_ship.sem_flg=0;
-    semop(dSem_ship,&sops_ship,1);
-    printf("\nNAVI: \n");
-    printf("- Navi in porto %d\n",ship_d->ship_in_port);
-    printf("- Navi in mare con carico %d\n",ship_d->ship_sea_goods);
-    printf("- Navi in mare senza carico %d\n",ship_d->ship_sea_no_goods);
-    sops_ship.sem_op=1;
-    semop(dSem_ship,&sops_ship,1);
     printf("\n");
 
     return allOffer == 1 || allDemand == 1 || weather_d->maelstrom == SO_NAVI;
@@ -707,6 +710,7 @@ int deallocateResources(struct goods_states* good_d,struct port_states* port_d,s
     int shmWeather;
     int dSem_ship;
     int shm_goods_info;
+    int mutexDocking;
 
     /*Sy SEMAPHORE */
 
@@ -714,6 +718,14 @@ int deallocateResources(struct goods_states* good_d,struct port_states* port_d,s
         TEST_ERROR;
     }
     if((sySem=semctl(sySem,0,IPC_RMID)) == -1){
+        TEST_ERROR;
+    }
+
+    /*Sy mutex docking*/
+    if((mutexDocking = semget(MUTEX_DOCK,1,0666)) == -1){
+        TEST_ERROR;
+    }
+    if((mutexDocking=semctl(mutexDocking,0,IPC_RMID)) == -1){
         TEST_ERROR;
     }
 
@@ -752,7 +764,7 @@ int deallocateResources(struct goods_states* good_d,struct port_states* port_d,s
     }
 
 
-    if((dSem_ship = semget(DUMP_KEY_SHIP,1,0666)) == -1){
+    if((dSem_ship = semget(SHIP_KEY,1,0666)) == -1){
         TEST_ERROR;
     }
 
