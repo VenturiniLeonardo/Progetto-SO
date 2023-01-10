@@ -64,7 +64,9 @@ int main(){
     int shmShip;
     int shmWeather;
     int mutexDocking;
+    int child_pid;
     struct sembuf sops; 
+    struct timespec req;
 
     if(variableUpdate()){
         printf("Error set all variable\n");
@@ -212,11 +214,13 @@ int main(){
     printf("START...\n");
     
     elapsedDays=0; 
+    req.tv_sec=1;
+    req.tv_nsec=0;
 
     /*days and dump management*/
     while(elapsedDays<SO_DAYS){
         generatorDailySupply();
-        sleep(1);
+        nanosleep(&req,NULL);
         kill(weatherPid,SIGUSR1);
         printf("Day %d\n",elapsedDays+1);
         updateDateExpiry();
@@ -232,6 +236,9 @@ int main(){
     stopWeather();
     stopAllShips();
     killAllPorts();
+
+    while ((child_pid = wait(NULL)) != -1)
+        continue;
 
     printFinalDump(struct_goods_dump,struct_port_dump,struct_ship_dump,weather_d);
 
