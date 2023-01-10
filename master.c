@@ -86,7 +86,7 @@ int main(){
     }
 
 
-    if(semctl(sySem,0,SETVAL,SO_NAVI+SO_PORTI+2)<0){
+    if(semctl(sySem,0,SETVAL,SO_NAVI+SO_PORTI+1)<0){                /*******************************************************************************/
         fprintf(stderr,"Error initializing semaphore, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
@@ -199,7 +199,7 @@ int main(){
     goodsInfoGenerator();
     portGenerator();
     shipGenerator();
-    weatherGenerator();
+    /*weatherGenerator();*/
 
 
     /*waiting for synchronization*/
@@ -219,9 +219,9 @@ int main(){
 
     /*days and dump management*/
     while(elapsedDays<SO_DAYS){
-        generatorDailySupply();
+        /*generatorDailySupply();*/
         nanosleep(&req,NULL);
-        kill(weatherPid,SIGUSR1);
+        /*kill(weatherPid,SIGUSR1);*/
         printf("Day %d\n",elapsedDays+1);
         updateDateExpiry();
         if(printDump(dSem,struct_goods_dump,struct_port_dump,struct_ship_dump,weather_d)){
@@ -233,7 +233,7 @@ int main(){
     }
 
     /*Kill all process*/ 
-    stopWeather();
+    /*stopWeather();*/
     stopAllShips();
     killAllPorts();
 
@@ -468,8 +468,8 @@ int printDump(int dSem, struct goods_states* good_d,struct port_states* port_d,s
     semop(dSem,&sops_dump,1);
 
     printf("\n");
-
-    return allOffer == 1 || allDemand == 1 || weather_d->maelstrom == SO_NAVI;
+    return 0;
+    /*return allOffer == 1 || allDemand == 1 || weather_d->maelstrom == SO_NAVI;                                  gfdgggggggggggggggggggggggggg*/
 }
 
 /*

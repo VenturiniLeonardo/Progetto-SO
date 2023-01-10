@@ -298,6 +298,7 @@ void generatorSupply(){
     semop(semSupply,&sops,1);
 
     /*Dump*/
+    /*
     sops_dump.sem_num=0;
     sops_dump.sem_op=-1;
     sops_dump.sem_flg=0;
@@ -307,6 +308,7 @@ void generatorSupply(){
     port_d[my_index].goods_offer+=newGood.quantity*info_goods[newGood.type-1].size;
     sops_dump.sem_op=1;
     semop(dumpSem,&sops_dump,1);
+    */
 
 }
 
@@ -343,14 +345,14 @@ void reloadExpiryDate(){
                 shmPort[i].supply.date_expiry = -1;
 
                 /*Dump*/
-                sops_dump.sem_num=0;
+                /*sops_dump.sem_num=0;
                 sops_dump.sem_op=-1;
                 sops_dump.sem_flg=0;
                 semop(dumpSem,&sops_dump,1);
                 good_d[i].goods_in_port -= shmPort[i].supply.quantity*info_goods[i].size;
                 good_d[i].goods_expired_port += shmPort[i].supply.quantity*info_goods[i].size;
                 sops_dump.sem_op=1;
-                semop(dumpSem,&sops_dump,1);
+                semop(dumpSem,&sops_dump,1);*/
             }
         }
     }
@@ -407,13 +409,13 @@ void generatorDemand(){
         }
 
         /*Dump*/
-        sops_dump.sem_num=0;
+        /*sops_dump.sem_num=0;
         sops_dump.sem_op=-1;
         sops_dump.sem_flg=0;
         semop(dumpSem,&sops_dump,1);
         port_d[my_index].goods_demand += msg.quantity*info_goods[msg.type-1].size; 
         sops_dump.sem_op=1;
-        semop(dumpSem,&sops_dump,1);
+        semop(dumpSem,&sops_dump,1);*/
     }
 
     sops.sem_op=1;

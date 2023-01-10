@@ -57,9 +57,9 @@ int size;
 
 /*Handler*/
 void signalHandler(int signal){
-
+    
     switch(signal){
-        case SIGUSR2:
+        /*case SIGUSR2:
             storm_sleep();
         break;
         case SIGUSR1:
@@ -72,13 +72,14 @@ void signalHandler(int signal){
             ships[getPositionByShipPid()].ship = 0;
             restoreDemand();
             exit(EXIT_SUCCESS);
-        break;
+        break;*/
         case SIGTERM:
             deallocateResources();
             exit(EXIT_SUCCESS);
         break;
 
     }
+    
 }
 /*ship main*/
 int main(){
@@ -358,29 +359,38 @@ Output: int
 Desc: procedures for undocking at the port
 */
 void undocking(pid_t pid_port){
-    int dockSem;
-    struct sembuf sops; 
-    struct sembuf ship_dump;
+        int dockSem;
+        struct sembuf sops; 
+        struct sembuf mutex;
+        struct sembuf ship;
+        
+        mutex.sem_op = -1;
+        mutex.sem_flg = 0;
+        mutex.sem_num = 0;
+        semop(mutexDocking,&mutex,1);
 
-    /*Sem ship*/
-    ship_dump.sem_op=-1;
-    ship_dump.sem_num=0;
-    ship_dump.sem_flg=0;
-    semop(sem_ship,&ship_dump,1);
-    ships[getPositionByShipPid()].port = 0;
-    ship_dump.sem_op = 1;
-    semop(sem_ship,&ship_dump,1);
+        /*Semaphore Dock*/
+        if((dockSem = semget(pid_port,1,0666))==-1){
+            TEST_ERROR;
+        }
+        sops.sem_num=0;
+        sops.sem_op=1;
+        sops.sem_flg=0;
+        semop(dockSem,&sops,1);
 
-    /*Semaphore Dock*/
-    if((dockSem = semget(pid_port,1,0666)) == -1){
-        TEST_ERROR;
-    }
-    sops.sem_num=0;
-    sops.sem_op=1;
-    sops.sem_flg=0;
-    semop(dockSem,&sops,1);
+        mutex.sem_op = 1;
+        semop(mutexDocking,&mutex,1);
 
+        /*Sem ships*/
+        ship.sem_op=-1;
+        ship.sem_num=0;
+        ship.sem_flg=0;
+        semop(sem_ship,&ship,1);
 
+        ships[getPositionByShipPid()].port = 0;
+
+        ship.sem_op = 1;
+        semop(sem_ship,&ship,1);
 }
 
 /*
@@ -397,7 +407,6 @@ int getMaxExpiryDate(struct shmSinglePort shmPort[]){
     }
     return maxDate;
 }
-
 
 /*
 Input: pid_t
@@ -611,7 +620,7 @@ struct port* getSupply(pid_t pid_port){
             demandPort = 0;
             return sendPort;
         }
-
+        
 }
 /*
 Input: int
@@ -678,7 +687,7 @@ struct port* dock_access_load(pid_t pid_port){
     sops_dump.sem_op=-1;
     sops_dump.sem_num=0;
     sops_dump.sem_flg=0;
-    semop(dumpSem,&sops_dump,1);   
+    semop(dumpSem,&sops_dump,1);  
     
     /*Dump  ships*/
     ship_d->ship_in_port += 1;
