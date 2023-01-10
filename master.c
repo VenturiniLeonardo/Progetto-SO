@@ -219,7 +219,7 @@ int main(){
 
     /*days and dump management*/
     while(elapsedDays<SO_DAYS){
-        /*generatorDailySupply();*/
+        generatorDailySupply();
         nanosleep(&req,NULL);
         kill(weatherPid,SIGUSR1);
         printf("Day %d\n",elapsedDays+1);
@@ -233,6 +233,7 @@ int main(){
     }
 
     /*Kill all process*/ 
+
     stopWeather();
     stopAllShips();
     killAllPorts();
@@ -712,7 +713,7 @@ void updateDateExpiry(){
     
     for(i = 0;i<SO_NAVI;i++){
         if(ships[i].ship != 0){}
-            /*kill(ships[i].ship,SIGUSR1);*/
+            kill(ships[i].ship,SIGUSR1);
 
     }
 

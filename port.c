@@ -175,7 +175,7 @@ int main(int argc,char*argv[]){
     /*Setup handler*/
     bzero(&sa, sizeof(sa));
     sa.sa_handler = signalHandler;
-    sa.sa_flags= SA_RESTART|SA_NODEFER;
+    /*sa.sa_flags= SA_RESTART|SA_NODEFER;*/
     sigaction(SIGUSR2,&sa,NULL);
     sigaction(SIGUSR1,&sa,NULL);
     sigaction(SIGTERM,&sa,NULL);
@@ -227,11 +227,25 @@ void generatorDailySupply(){
     sops.sem_num=0;
     sops.sem_op=-1;
     sops.sem_flg=0;
-    semop(semSupply,&sops,1);
+    while(semop(semSupply,&sops,1)<0){
+        if(errno!=EINTR){
+            TEST_ERROR;
+            break;
+        }
+        else 
+            continue;
+    }
     sops_dump.sem_num=0;
     sops_dump.sem_op=-1;
     sops_dump.sem_flg=0;
-    semop(dumpSem,&sops_dump,1);
+    while(semop(dumpSem,&sops_dump,1)<0){
+            if(errno!=EINTR){
+            TEST_ERROR;
+            break;
+        }
+        else 
+            continue;
+    }
     if(shmPort[msg_Supply.type-1].demandGoods==0 && port_d[my_index].goods_offer+msg_Supply.quantity*info_goods[msg_Supply.type-1].size<=SO_FILL){
         shmPort[msg_Supply.type-1].supplyGoods=1;
         shmPort[msg_Supply.type-1].supply.type=msg_Supply.type;
@@ -280,7 +294,14 @@ void generatorSupply(){
     sops.sem_op=-1;
     sops.sem_flg=0;
 
-    semop(semSupply,&sops,1);
+    while(semop(semSupply,&sops,1)<0){
+        if(errno!=EINTR){
+            TEST_ERROR;
+            break;
+        }
+        else 
+            continue;
+    }
 
     srand(getpid());
     newGood.type = (rand() % SO_MERCI)+1;
@@ -302,7 +323,14 @@ void generatorSupply(){
     sops_dump.sem_num=0;
     sops_dump.sem_op=-1;
     sops_dump.sem_flg=0;
-    semop(dumpSem,&sops_dump,1);
+   while(semop(dumpSem,&sops_dump,1)<0){
+            if(errno!=EINTR){
+            TEST_ERROR;
+            break;
+        }
+        else 
+            continue;
+    }
 
     good_d[newGood.type-1].goods_in_port += newGood.quantity*info_goods[newGood.type-1].size;
     port_d[my_index].goods_offer+=newGood.quantity*info_goods[newGood.type-1].size;
@@ -333,7 +361,14 @@ void reloadExpiryDate(){
     sops.sem_num=0;
     sops.sem_op=-1;
     sops.sem_flg=0;
-    semop(semSupply,&sops,1);
+    while(semop(semSupply,&sops,1)<0){
+            if(errno!=EINTR){
+            TEST_ERROR;
+            break;
+        }
+        else 
+            continue;
+    }
 
     for(i=0;i<SO_MERCI;i++){
         if(shmPort[i].supplyGoods == 1){
@@ -347,7 +382,14 @@ void reloadExpiryDate(){
                 sops_dump.sem_num=0;
                 sops_dump.sem_op=-1;
                 sops_dump.sem_flg=0;
-                semop(dumpSem,&sops_dump,1);
+                while(semop(dumpSem,&sops_dump,1)<0){
+                    if(errno!=EINTR){
+                        TEST_ERROR;
+                        break;
+                    }
+                    else 
+                        continue;
+                }      
                 good_d[i].goods_in_port -= shmPort[i].supply.quantity*info_goods[i].size;
                 good_d[i].goods_expired_port += shmPort[i].supply.quantity*info_goods[i].size;
                 sops_dump.sem_op=1;
@@ -383,7 +425,14 @@ void generatorDemand(){
     sops.sem_op=-1;
     sops.sem_flg=0;
     
-    semop(semSupply,&sops,1);
+    while(semop(semSupply,&sops,1)<0){
+        if(errno!=EINTR){
+            TEST_ERROR;
+            break;
+            }
+        else 
+            continue;
+    }    
 
     srand(time(NULL));
     if(SO_MERCI == 1){
@@ -411,7 +460,14 @@ void generatorDemand(){
             sops_dump.sem_num=0;
             sops_dump.sem_op=-1;
             sops_dump.sem_flg=0;
-            semop(dumpSem,&sops_dump,1);
+            while(semop(dumpSem,&sops_dump,1)<0){
+                if(errno!=EINTR){
+                    TEST_ERROR;
+                    break;
+                }
+            else 
+                continue;
+            }    
             port_d[my_index].goods_demand += msg.quantity*info_goods[msg.type-1].size; 
             sops_dump.sem_op=1;
             semop(dumpSem,&sops_dump,1);
@@ -441,7 +497,14 @@ int blockAllDock(){
         sops.sem_num=0;
         sops.sem_op=-semVal;
         sops.sem_flg=0;
-        semop(semDock,&sops,1);         
+        while(semop(semDock,&sops,1)<0){
+           if(errno!=EINTR){
+                TEST_ERROR;
+                break;
+            }
+            else 
+                continue;
+        }    
         return semVal;
     }
     return 0;
@@ -484,7 +547,14 @@ void stop_ships(){
     ship_dump.sem_op=-1;
     ship_dump.sem_num=0;
     ship_dump.sem_flg=0;
-    semop(sem_ship,&ship_dump,1);
+    while(semop(sem_ship,&ship_dump,1)<0){
+        if(errno!=EINTR){
+            TEST_ERROR;
+            break;
+            }
+        else 
+            continue;
+    }    
     for(i=0;i<SO_NAVI;i++){
         if(ships[i].port==port_pid){
             kill(ships[i].ship,SIGPROF);
@@ -509,7 +579,14 @@ void swell(){
     sops_dump.sem_op=-1;
     sops_dump.sem_num=0;
     sops_dump.sem_flg=0;
-    semop(dumpSem,&sops_dump,1);
+    while(semop(dumpSem,&sops_dump,1)<0){
+        if(errno!=EINTR){
+            TEST_ERROR;
+            break;
+        }
+        else 
+            continue;
+    }    
     port_d[my_index].swell = 1;
     sops_dump.sem_op=1;
     semop(dumpSem,&sops_dump,1);  
