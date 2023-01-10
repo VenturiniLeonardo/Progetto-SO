@@ -160,7 +160,7 @@ int main(){
                 req.tv_nsec=rem.tv_nsec;
             }
         }
-        maelstrom();
+        /*maelstrom();*/
     }while(1);
 
     return 0;
@@ -215,13 +215,6 @@ void swell(){
     srand(time(NULL));
     posPort = rand()%SO_PORTI;
     kill(ports[posPort].pidPort,SIGUSR2);
-    sops_dump.sem_op=-1;
-    sops_dump.sem_num=0;
-    sops_dump.sem_flg=0;
-    semop(dumpSem,&sops_dump,1);
-    port_d[getIndexFromPid(ports[posPort].pidPort)].swell = 1;
-    sops_dump.sem_op=1;
-    semop(dumpSem,&sops_dump,1);    
 }
 
 /*
@@ -237,7 +230,7 @@ void storm(){
     if(length != 0){
         srand(time(NULL));
         index=rand()%length;
-        kill(ships_sea[index],SIGUSR2);
+        /*kill(ships_sea[index],SIGUSR2);*/
 
         /*Dump*/
         sops_dump.sem_op=-1;
@@ -264,7 +257,7 @@ void maelstrom(){
     srand(time(NULL));
     if(ships_sea != NULL){
         randShip=rand()%length;  
-        kill(ships_sea[randShip],SIGALRM);
+        /*kill(ships_sea[randShip],SIGALRM);*/
 
         /*Dump*/
         sops_dump.sem_op=-1;
@@ -339,7 +332,6 @@ void deallocateResources(){
     shmdt(weather_d);
 
 }  
-
 
 
 

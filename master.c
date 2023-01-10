@@ -86,18 +86,18 @@ int main(){
     }
 
 
-    if(semctl(sySem,0,SETVAL,SO_NAVI+SO_PORTI+1)<0){                /*******************************************************************************/
+    if(semctl(sySem,0,SETVAL,SO_NAVI+SO_PORTI+2)<0){
         fprintf(stderr,"Error initializing semaphore, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
     /*Semaphore mutex docking*/
-    if((mutexDocking = semget(MUTEX_DOCK,1,IPC_CREAT|IPC_EXCL|0600)) == -1){
+    if((mutexDocking = semget(MUTEX_DOCK,1,IPC_CREAT|IPC_EXCL|0666)) == -1){
         TEST_ERROR;
     }
-    if(semctl(mutexDocking,0,SETVAL,1) == -1){
+    if((mutexDocking=semctl(mutexDocking,0,SETVAL,1)) == -1){
         TEST_ERROR;
     }
-    printf("port: master %d %d %d\n",semctl(mutexDocking,0,GETVAL),mutexDocking,getpid());
+
     /*Shared memory for ports*/
     if((shmPort = shmget(PORT_POS_KEY,sizeof(struct port)*SO_PORTI,IPC_CREAT|IPC_EXCL|0666 )) == -1){
         fprintf(stderr,"Error shared memory port creation in master, %d: %s\n",errno,strerror(errno));
@@ -199,7 +199,7 @@ int main(){
     goodsInfoGenerator();
     portGenerator();
     shipGenerator();
-    /*weatherGenerator();*/
+    weatherGenerator();
 
 
     /*waiting for synchronization*/
@@ -221,7 +221,7 @@ int main(){
     while(elapsedDays<SO_DAYS){
         /*generatorDailySupply();*/
         nanosleep(&req,NULL);
-        /*kill(weatherPid,SIGUSR1);*/
+        kill(weatherPid,SIGUSR1);
         printf("Day %d\n",elapsedDays+1);
         updateDateExpiry();
         if(printDump(dSem,struct_goods_dump,struct_port_dump,struct_ship_dump,weather_d)){
@@ -233,10 +233,9 @@ int main(){
     }
 
     /*Kill all process*/ 
-    /*stopWeather();*/
+    stopWeather();
     stopAllShips();
     killAllPorts();
-
     while ((child_pid = wait(NULL)) != -1)
         continue;
 
@@ -468,8 +467,8 @@ int printDump(int dSem, struct goods_states* good_d,struct port_states* port_d,s
     semop(dSem,&sops_dump,1);
 
     printf("\n");
-    return 0;
-    /*return allOffer == 1 || allDemand == 1 || weather_d->maelstrom == SO_NAVI;                                  gfdgggggggggggggggggggggggggg*/
+
+    return allOffer == 1 || allDemand == 1 || weather_d->maelstrom == SO_NAVI;
 }
 
 /*
@@ -560,7 +559,7 @@ Desc: send a signal to all ships to indicate termination
 void stopAllShips(){
     int i;
     for(i = 0; i< SO_NAVI;i++){
-        if(ships[i].ship != 0)
+        if(ships[i].ship != -1)
             kill(ships[i].ship,SIGTERM);
     }
 }
@@ -712,8 +711,9 @@ void updateDateExpiry(){
     }
     
     for(i = 0;i<SO_NAVI;i++){
-        if(ships[i].ship != 0)
-            kill(ships[i].ship,SIGUSR1);
+        if(ships[i].ship != 0){}
+            /*kill(ships[i].ship,SIGUSR1);*/
+
     }
 
 }
@@ -867,4 +867,3 @@ void deallocateResources(struct goods_states* good_d,struct port_states* port_d,
 
 
 }
-

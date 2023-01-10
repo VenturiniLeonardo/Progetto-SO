@@ -54,12 +54,12 @@ struct port_states* port_d;
 int mutexDocking;
 int time_expry_on;
 int size;
+int dockSem;
 
 /*Handler*/
 void signalHandler(int signal){
-    
     switch(signal){
-        /*case SIGUSR2:
+        case SIGUSR2:
             storm_sleep();
         break;
         case SIGUSR1:
@@ -69,11 +69,12 @@ void signalHandler(int signal){
             swell();
         break;
         case SIGALRM:
-            ships[getPositionByShipPid()].ship = 0;
+            ships[getPositionByShipPid()].ship = -1;
             restoreDemand();
             exit(EXIT_SUCCESS);
-        break;*/
+        break;
         case SIGTERM:
+            sleep(5);
             deallocateResources();
             exit(EXIT_SUCCESS);
         break;
@@ -101,13 +102,16 @@ int main(){
     int shm_dump_goods; 
     double distanza;
     int shmShip;
-
+    struct sembuf sops_dump;
+    struct sembuf semaphore;
+    
     if(variableUpdate()){
         printf("Error set all variable\n");
         return 0;
     }
     /*Generation coords ship*/
     ship_coords=generateRandCoords();
+
     
     /*Shared memory ports*/
     if((shm_ports = shmget(PORT_POS_KEY,0,0666)) == -1){
@@ -156,28 +160,27 @@ int main(){
         fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
-    
+
     if((sem_ship = semget(SHIP_KEY,1,0666)) == -1){
         fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
-    /*Mutex sem for acces dock */
-    if((mutexDocking = semget(MUTEX_DOCK,1,0600)) == -1){
-        TEST_ERROR;
-    }
-    if(semctl(mutexDocking,0,SETVAL,1) == -1){
-        TEST_ERROR;
-    }
+
     /*Sy Semaphore*/
     if((sySem = semget(SY_KEY,1,0666)) == -1){
         fprintf(stderr,"Error sy semaphore creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
-
+    
+    /*Mutex sem for acces dock */
+    if((mutexDocking = semget(MUTEX_DOCK,1,0666)) == -1){
+        TEST_ERROR;
+    }
     /*Setup handler*/
     bzero(&sa, sizeof(sa));
     sa.sa_handler = signalHandler;
-    sa.sa_flags=SA_RESTART | SA_NODEFER;
+    sa.sa_flags=0;
+    sa.sa_flags= SA_RESTART | SA_NODEFER;
     sigaction(SIGUSR2,&sa,NULL);
     sigaction(SIGUSR1,&sa,NULL);
     sigaction(SIGTERM,&sa,NULL);
@@ -216,12 +219,13 @@ int main(){
         }
     }
 
-    /*iterative process for ship management*/
+    /*iterative process for ship management*/   
     do{
-        nextPort = dock_access_load(currentPort->pidPort);
-        nextPort->pidPort = 0;
-        goods_on.quantity = 0;
-        if(nextPort->pidPort == 0){/*Didn’t find a shipment and goes to the nearest port*/
+        docking(currentPort->pidPort);
+        nextPort = getSupply(currentPort->pidPort);
+        undocking(currentPort->pidPort);
+        
+        if(nextPort->pidPort == 0){
             nextPort = nearPort(prevPort->pidPort,currentPort->pidPort,currentPort->coord);
             distanza=distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED;
             req.tv_sec=(int)distanza;
@@ -236,10 +240,10 @@ int main(){
                     req.tv_nsec=rem.tv_nsec;
                 }
             }
+            
         }else{
-            /*
             distanza=distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED;            
-             
+            
             req.tv_sec=(int)distanza;
             req.tv_nsec=(distanza-(int)distanza)*1000000000;
 
@@ -251,13 +255,41 @@ int main(){
                     req.tv_nsec=rem.tv_nsec;
                 }
             }
-
             prevPort = currentPort;
-            currentPort =nextPort;
+            currentPort = nextPort;
+
+            docking(currentPort->pidPort);
+
+            if(goods_on.date_expiry > 0 && goods_on.quantity > 0){
+
+                distanza=(goods_on.quantity*size)/SO_LOADSPEED;
+                req.tv_sec=(int)distanza;
+                req.tv_nsec= (distanza-(int)distanza)*1000000000;
+                while(nanosleep(&req,&rem)<0){
+                    if(errno!=EINTR){
+                        TEST_ERROR;
+                    }else{
+                        req.tv_sec=rem.tv_sec;
+                        req.tv_nsec=rem.tv_nsec;
+                    }
+                }
+                goods_on.quantity = 0;
+                goods_on.date_expiry = -1;
+                sops_dump.sem_op=-1;
+                semop(dumpSem,&sops_dump,1);
+                /*Dump goods*/
+                good_d[goods_on.type-1].goods_delivered += goods_on.quantity*size;
+                good_d[goods_on.type-1].goods_on_ship -= goods_on.quantity*size;
+                /*Dump ports*/
+                port_d[get_index_from_pid(currentPort->pidPort)].goods_receved +=goods_on.quantity*size;
+                port_d[get_index_from_pid(currentPort->pidPort)].goods_demand -=goods_on.quantity*size;
+                sops_dump.sem_op=1;
+                semop(dumpSem,&sops_dump,1);
+            }
             
-            dock_access_unload(currentPort->pidPort);
-            */
+            undocking(currentPort->pidPort);
         }
+
     }while(1);
 
     return 0;
@@ -323,42 +355,46 @@ Output: void
 Desc: procedures for docking at the port
 */
 void docking(pid_t pid_port){
-        int dockSem;
-        struct sembuf sops; 
-        struct sembuf mutex;
-        struct sembuf ship;
-        
-        mutex.sem_op = -1;
-        mutex.sem_flg = 0;
-        mutex.sem_num = 0;
-        semop(mutexDocking,&mutex,1);
-        printf("port: aa %d %d %d\n",semctl(mutexDocking,0,GETVAL),mutexDocking,getpid());
-        /*Semaphore Dock*/
-        if((dockSem = semget(pid_port,1,0666))==-1){
-            TEST_ERROR;
-        }
-        sops.sem_num=0;
-        sops.sem_op=-1;
-        sops.sem_flg=0;
-        semop(dockSem,&sops,1);
+    struct sembuf sops;
+    struct sembuf sops_dump;
+    struct sembuf ship_dump;
+    
 
-        mutex.sem_flg = 0;
-        mutex.sem_num = 0;
-        mutex.sem_op = 1;
-        semop(mutexDocking,&mutex,1);
+    /*ship_dump.sem_op=-1;
+    ship_dump.sem_num=0;
+    ship_dump.sem_flg=0;
+    semop(sem_ship,&ship_dump,1);
+    ships[getPositionByShipPid()].ship = pid_port;
+    ship_dump.sem_op=1;
+    semop(sem_ship,&ship_dump,1);*/
+    
+    if((dockSem = semget(pid_port,1,0666)) == -1)
+        TEST_ERROR;
 
-        /*Sem ships*/
-        /*
-        ship.sem_op=-1;
-        ship.sem_num=0;
-        ship.sem_flg=0;
-        semop(sem_ship,&ship,1);
+    sops.sem_num=0;    
+    sops.sem_flg=0;
+    sops.sem_op = -1;
+    semop(dockSem,&sops,1);
+             
+    sops_dump.sem_op=-1;
+    sops_dump.sem_num=0;
+    sops_dump.sem_flg=0;
+    semop(dumpSem,&sops_dump,1);  
 
-        ships[getPositionByShipPid()].port = pid_port;
+    if(goods_on.date_expiry > 0 && goods_on.quantity > 0){
+        ship_d->ship_in_port += 1;
+        ship_d->ship_sea_goods -= 1;
+    }else{
+        ship_d->ship_in_port += 1;
+        ship_d->ship_sea_no_goods -= 1;
+    }
 
-        ship.sem_op = 1;
-        semop(sem_ship,&ship,1);
-        */
+
+    /*Dump ports*/
+    port_d[get_index_from_pid(pid_port)].dock_occuped += 1;
+
+    sops_dump.sem_op=1;
+    semop(dumpSem,&sops_dump,1);    
 }
 
 /*
@@ -367,43 +403,42 @@ Output: int
 Desc: procedures for undocking at the port
 */
 void undocking(pid_t pid_port){
-        int dockSem;
-        struct sembuf sops; 
-        struct sembuf mutex;
-        struct sembuf ship;
-        
-        mutex.sem_op = -1;
-        mutex.sem_flg = 0;
-        mutex.sem_num = 0;
-                   
-        semop(mutexDocking,&mutex,1);
-        printf("port: uu %d %d %d\n",semctl(mutexDocking,0,GETVAL),mutexDocking,getpid());
-        /*Semaphore Dock*/
-        if((dockSem = semget(pid_port,1,0666))==-1){
-            TEST_ERROR;
-        }
-        sops.sem_num=0;
-        sops.sem_op=1;
-        sops.sem_flg=0;
-        semop(dockSem,&sops,1);
+    struct sembuf sops;
+    struct sembuf sops_dump;
+    struct sembuf ship_dump;
 
-        mutex.sem_flg = 0;
-        mutex.sem_num = 0;
-        mutex.sem_op = 1;
-        semop(mutexDocking,&mutex,1);
+    /*ship_dump.sem_num=0;
+    ship_dump.sem_flg=0;
+    ship_dump.sem_op=-1;
+    semop(sem_ship,&ship_dump,1);
+    ships[getPositionByShipPid()].ship = 0;
+    ship_dump.sem_op=1;
+    semop(sem_ship,&ship_dump,1);*/
 
-        /*Sem ships*/
-        /*
-        ship.sem_op=-1;
-        ship.sem_num=0;
-        ship.sem_flg=0;
-        semop(sem_ship,&ship,1);
+    sops.sem_flg = 0;
+    sops.sem_num = 0;
+    sops.sem_op = 1;
+    semop(dockSem,&sops,1);
 
-        ships[getPositionByShipPid()].port = 0;
 
-        ship.sem_op = 1;
-        semop(sem_ship,&ship,1);
-        */
+    /*Dump ships*/
+    sops_dump.sem_flg=0;
+    sops_dump.sem_num=0;
+    sops_dump.sem_op=-1;
+    semop(dumpSem,&sops_dump,1);
+
+    if(goods_on.quantity == 0){
+        ship_d->ship_in_port -= 1;
+        ship_d->ship_sea_no_goods += 1;
+    }else{
+        ship_d->ship_in_port -= 1;
+        ship_d->ship_sea_goods += 1;
+    }
+
+    /*Dump ports*/
+    port_d[get_index_from_pid(pid_port)].dock_occuped -= 1;
+    sops_dump.sem_op=1;
+    semop(dumpSem,&sops_dump,1);
 }
 
 /*
@@ -420,6 +455,7 @@ int getMaxExpiryDate(struct shmSinglePort shmPort[]){
     }
     return maxDate;
 }
+
 
 /*
 Input: pid_t
@@ -467,7 +503,7 @@ struct port* getSupply(pid_t pid_port){
         if((shmSupply = shmget(pid_port,0,0666)) == -1){
             TEST_ERROR; 
         }
-
+        
         shmPort = (struct shmSinglePort *)shmat(shmSupply,NULL,0);
         if(shmPort == (void *) -1){
             TEST_ERROR;
@@ -681,130 +717,6 @@ struct port* near_ports(pid_t currPort,double max_distance,int *length){
     return port_return;  
 }        
       
-    
-
-/*
-Input: pid_t
-Output: struct port*
-Desc: returns a struct port pointer containing the next port or an empty port if it finds nothing - operations docking and undocking
-*/
-struct port* dock_access_load(pid_t pid_port){
-    struct port* ports;
-    int dockSem;
-    int res_Supply;
-    struct port *ret_get_supply;
-    struct sembuf sops_dump;
-    
-    docking(pid_port);
-
-    sops_dump.sem_op=-1;
-    sops_dump.sem_num=0;
-    sops_dump.sem_flg=0;
-    semop(dumpSem,&sops_dump,1);  
-    
-    /*Dump  ships*/
-    ship_d->ship_in_port += 1;
-    ship_d->ship_sea_no_goods -= 1;
-
-    /*Dump ports*/
-    port_d[get_index_from_pid(pid_port)].dock_occuped += 1;
-    sops_dump.sem_op=1;
-    semop(dumpSem,&sops_dump,1);     
-    ret_get_supply = getSupply(pid_port);    
-
-    undocking(pid_port);
-
-    /*Dump ships*/
-    
-    
-    sops_dump.sem_op=-1;
-    semop(dumpSem,&sops_dump,1);
-
-    if(goods_on.quantity == 0){
-        ship_d->ship_in_port -= 1;
-        ship_d->ship_sea_no_goods += 1;
-    }else{
-        ship_d->ship_in_port -= 1;
-        ship_d->ship_sea_goods += 1;
-    }
-
-    /*Dump ports*/
-    port_d[get_index_from_pid(pid_port)].dock_occuped -= 1;
-    sops_dump.sem_op=1;
-    semop(dumpSem,&sops_dump,1);
-    return ret_get_supply;
-}
-
-/*
-Input: pid_t
-Output: void
-Desc: allows access to the loading dock
-*/
-void dock_access_unload(pid_t pidPort){
-    struct timespec req;
-    struct timespec rem;
-    struct sembuf sops_dump;
-    double time_nanosleep;
-
-    /*Semaphore Dock*/
-    docking(pidPort);
-    sops_dump.sem_op=-1;
-    sops_dump.sem_num=0;
-    sops_dump.sem_flg=0;
-    semop(dumpSem,&sops_dump,1);
-     /*Dump ships*/  
-
-    port_d[get_index_from_pid(pidPort)].dock_occuped += 1;
-
-    if(goods_on.date_expiry > 0 && goods_on.quantity > 0){
-
-        ship_d->ship_in_port += 1;
-        ship_d->ship_sea_goods -= 1;
-        sops_dump.sem_op=1;
-        semop(dumpSem,&sops_dump,1);
-
-        time_nanosleep=(goods_on.quantity*size)/SO_LOADSPEED;
-        req.tv_sec=(int)time_nanosleep;
-        req.tv_nsec= (time_nanosleep-(int)time_nanosleep)*1000000000;
-        while(nanosleep(&req,&rem)<0){
-            if(errno!=EINTR){
-                TEST_ERROR;
-            }else{
-                req.tv_sec=rem.tv_sec;
-                req.tv_nsec=rem.tv_nsec;
-            }
-        }
-        sops_dump.sem_op=-1;
-        semop(dumpSem,&sops_dump,1);
-        /*Dump goods*/
-        good_d[goods_on.type-1].goods_delivered += goods_on.quantity*size;
-        good_d[goods_on.type-1].goods_on_ship -= goods_on.quantity*size;
-        /*Dump ports*/
-        port_d[get_index_from_pid(pidPort)].goods_receved +=goods_on.quantity*size;
-        port_d[get_index_from_pid(pidPort)].goods_demand -=goods_on.quantity*size;
-        sops_dump.sem_op=1;
-        semop(dumpSem,&sops_dump,1);
-    }else{
-        ship_d->ship_in_port += 1;
-        ship_d->ship_sea_no_goods -= 1;
-        sops_dump.sem_op=1;
-        semop(dumpSem,&sops_dump,1);
-
-    }
-    
-    /*Dump ships*/
-    undocking(pidPort);
-    sops_dump.sem_op=-1;
-    semop(dumpSem,&sops_dump,1);
-    ship_d->ship_in_port -= 1;
-    ship_d->ship_sea_no_goods += 1;
-
-    /*Dump ports*/
-    port_d[get_index_from_pid(pidPort)].dock_occuped -= 1;
-    sops_dump.sem_op=1;
-    semop(dumpSem,&sops_dump,1);
-    
-}
 
 /*
 Input: pid_t

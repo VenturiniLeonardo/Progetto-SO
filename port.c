@@ -78,6 +78,7 @@ int main(int argc,char*argv[]){
     int shm_dump_goods;
     int shmShip;
     int shmGoods;
+    
 
     my_index=atoi(argv[1]);
 
@@ -97,6 +98,7 @@ int main(int argc,char*argv[]){
     if(semctl(dockSem,0,SETVAL,nDocks) == -1){
         TEST_ERROR;
     }
+
     /*Dump for port*/
     if((shm_dump_port=shmget(PORT_DUMP_KEY,sizeof(struct port_states),0666))==-1)
         TEST_ERROR;
@@ -117,8 +119,7 @@ int main(int argc,char*argv[]){
         exit(EXIT_FAILURE);
     }
     good_d=(struct goods_states*) shmat(shm_dump_goods,NULL,0);
-    if(good_d == (void *) -1)
-        TEST_ERROR;
+    TEST_ERROR;
    
     /*Sem for dump*/
     if((dumpSem = semget(DUMP_KEY,1,0666)) == -1){
@@ -129,6 +130,7 @@ int main(int argc,char*argv[]){
     /*Sem creation for Supply */
     if((semSupply=semget(getpid()*2,1,IPC_CREAT|IPC_EXCL|0666)) == 1)
         TEST_ERROR;
+
     if(semctl(semSupply,0,SETVAL,1)==-1){
         TEST_ERROR;
     }
@@ -297,7 +299,6 @@ void generatorSupply(){
     semop(semSupply,&sops,1);
 
     /*Dump*/
-    /*
     sops_dump.sem_num=0;
     sops_dump.sem_op=-1;
     sops_dump.sem_flg=0;
@@ -307,7 +308,7 @@ void generatorSupply(){
     port_d[my_index].goods_offer+=newGood.quantity*info_goods[newGood.type-1].size;
     sops_dump.sem_op=1;
     semop(dumpSem,&sops_dump,1);
-    */
+
 }
 
 
@@ -343,7 +344,6 @@ void reloadExpiryDate(){
                 shmPort[i].supply.date_expiry = -1;
 
                 /*Dump*/
-                /*
                 sops_dump.sem_num=0;
                 sops_dump.sem_op=-1;
                 sops_dump.sem_flg=0;
@@ -352,7 +352,6 @@ void reloadExpiryDate(){
                 good_d[i].goods_expired_port += shmPort[i].supply.quantity*info_goods[i].size;
                 sops_dump.sem_op=1;
                 semop(dumpSem,&sops_dump,1);
-                */
             }
         }
     }
@@ -400,24 +399,25 @@ void generatorDemand(){
     }
 
     if(i != SO_MERCI+1){
-        shmPort[msg.type-1].demandGoods = 1;
         msg.quantity =  (SO_FILL/SO_PORTI)/info_goods[msg.type-1].size;
-        
-        if(sndDemand = msgsnd(mqDemand,&msg,sizeof(int),IPC_NOWAIT) == -1){
-            fprintf(stderr,"Error send messagge queue demand port, %d: %s\n",errno,strerror(errno));
-            exit(EXIT_FAILURE);
+        if(msg.quantity!=0){
+            shmPort[msg.type-1].demandGoods = 1;
+            if(sndDemand = msgsnd(mqDemand,&msg,sizeof(int),IPC_NOWAIT) == -1){
+                fprintf(stderr,"Error send messagge queue demand port, %d: %s\n",errno,strerror(errno));
+                exit(EXIT_FAILURE);
+            }
+
+            /*Dump*/
+            sops_dump.sem_num=0;
+            sops_dump.sem_op=-1;
+            sops_dump.sem_flg=0;
+            semop(dumpSem,&sops_dump,1);
+            port_d[my_index].goods_demand += msg.quantity*info_goods[msg.type-1].size; 
+            sops_dump.sem_op=1;
+            semop(dumpSem,&sops_dump,1);
         }
-
-        /*Dump*/
-        sops_dump.sem_num=0;
-        sops_dump.sem_op=-1;
-        sops_dump.sem_flg=0;
-        semop(dumpSem,&sops_dump,1);
-        port_d[my_index].goods_demand += msg.quantity*info_goods[msg.type-1].size; 
-        sops_dump.sem_op=1;
-        semop(dumpSem,&sops_dump,1);
     }
-
+    
     sops.sem_op=1;
     semop(semSupply,&sops,1);
 
@@ -444,7 +444,6 @@ int blockAllDock(){
         semop(semDock,&sops,1);         
         return semVal;
     }
-
     return 0;
 }
 
@@ -501,10 +500,23 @@ Output: void
 Desc: managment swell
 */
 void swell(){
-    int semVal = blockAllDock();
+    struct sembuf sops_dump;
     struct timespec req;
     struct timespec rem;
-    double time_swell=SO_SWELL_DURATION/24.0;
+    int semVal;
+    double time_swell;
+
+    sops_dump.sem_op=-1;
+    sops_dump.sem_num=0;
+    sops_dump.sem_flg=0;
+    semop(dumpSem,&sops_dump,1);
+    port_d[my_index].swell = 1;
+    sops_dump.sem_op=1;
+    semop(dumpSem,&sops_dump,1);  
+     
+    semVal = blockAllDock();
+
+    time_swell=SO_SWELL_DURATION/24.0;
     stop_ships();
     rem.tv_sec=0;
     rem.tv_nsec=0;
@@ -533,14 +545,11 @@ void deallocateResources(){
     int semSupply;
     int shm_dock;
     key_t supplyKey;
-
-    /*Shm ships/ports*/
-    shmdt(ships);
-
     /*Sem Docks*/
     if((semDock = semget(getpid(),1,0666)) == -1){
         TEST_ERROR;
     }
+
     if((semctl(semDock,0,IPC_RMID)) == -1){
         TEST_ERROR;
     }
@@ -574,7 +583,9 @@ void deallocateResources(){
     shmdt(info_goods);
     /*Dump*/
     shmdt(port_d);
-    shmdt(good_d);    
+    shmdt(good_d);
+    /*Shm ships/ports*/
+    shmdt(ships);    
 } 
                     
 /*
@@ -612,7 +623,6 @@ int variableUpdate(){
         if(strcmp(variable,"SO_SWELL_DURATION") == 0){
             SO_SWELL_DURATION = atoi(value);
         }
-
     }
 
 	fclose(f);
