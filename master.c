@@ -91,13 +91,13 @@ int main(){
         exit(EXIT_FAILURE);
     }
     /*Semaphore mutex docking*/
-    if((mutexDocking = semget(MUTEX_DOCK,1,IPC_CREAT|IPC_EXCL|0666)) == -1){
+    if((mutexDocking = semget(MUTEX_DOCK,1,IPC_CREAT|IPC_EXCL|0600)) == -1){
         TEST_ERROR;
     }
-    if((mutexDocking=semctl(mutexDocking,0,SETVAL,1)) == -1){
+    if(semctl(mutexDocking,0,SETVAL,1) == -1){
         TEST_ERROR;
     }
-
+    printf("port: master %d %d %d\n",semctl(mutexDocking,0,GETVAL),mutexDocking,getpid());
     /*Shared memory for ports*/
     if((shmPort = shmget(PORT_POS_KEY,sizeof(struct port)*SO_PORTI,IPC_CREAT|IPC_EXCL|0666 )) == -1){
         fprintf(stderr,"Error shared memory port creation in master, %d: %s\n",errno,strerror(errno));

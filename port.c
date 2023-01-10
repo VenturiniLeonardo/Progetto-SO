@@ -97,7 +97,6 @@ int main(int argc,char*argv[]){
     if(semctl(dockSem,0,SETVAL,nDocks) == -1){
         TEST_ERROR;
     }
-
     /*Dump for port*/
     if((shm_dump_port=shmget(PORT_DUMP_KEY,sizeof(struct port_states),0666))==-1)
         TEST_ERROR;
@@ -118,7 +117,8 @@ int main(int argc,char*argv[]){
         exit(EXIT_FAILURE);
     }
     good_d=(struct goods_states*) shmat(shm_dump_goods,NULL,0);
-    TEST_ERROR;
+    if(good_d == (void *) -1)
+        TEST_ERROR;
    
     /*Sem for dump*/
     if((dumpSem = semget(DUMP_KEY,1,0666)) == -1){
@@ -129,7 +129,6 @@ int main(int argc,char*argv[]){
     /*Sem creation for Supply */
     if((semSupply=semget(getpid()*2,1,IPC_CREAT|IPC_EXCL|0666)) == 1)
         TEST_ERROR;
-    /*printf(" --> %d %d\n",key_semSupply,semSupply);*/
     if(semctl(semSupply,0,SETVAL,1)==-1){
         TEST_ERROR;
     }
@@ -309,7 +308,6 @@ void generatorSupply(){
     sops_dump.sem_op=1;
     semop(dumpSem,&sops_dump,1);
     */
-
 }
 
 
@@ -345,14 +343,16 @@ void reloadExpiryDate(){
                 shmPort[i].supply.date_expiry = -1;
 
                 /*Dump*/
-                /*sops_dump.sem_num=0;
+                /*
+                sops_dump.sem_num=0;
                 sops_dump.sem_op=-1;
                 sops_dump.sem_flg=0;
                 semop(dumpSem,&sops_dump,1);
                 good_d[i].goods_in_port -= shmPort[i].supply.quantity*info_goods[i].size;
                 good_d[i].goods_expired_port += shmPort[i].supply.quantity*info_goods[i].size;
                 sops_dump.sem_op=1;
-                semop(dumpSem,&sops_dump,1);*/
+                semop(dumpSem,&sops_dump,1);
+                */
             }
         }
     }
@@ -409,13 +409,13 @@ void generatorDemand(){
         }
 
         /*Dump*/
-        /*sops_dump.sem_num=0;
+        sops_dump.sem_num=0;
         sops_dump.sem_op=-1;
         sops_dump.sem_flg=0;
         semop(dumpSem,&sops_dump,1);
         port_d[my_index].goods_demand += msg.quantity*info_goods[msg.type-1].size; 
         sops_dump.sem_op=1;
-        semop(dumpSem,&sops_dump,1);*/
+        semop(dumpSem,&sops_dump,1);
     }
 
     sops.sem_op=1;

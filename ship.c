@@ -162,10 +162,10 @@ int main(){
         exit(EXIT_FAILURE);
     }
     /*Mutex sem for acces dock */
-    if((mutexDocking = semget(MUTEX_DOCK,1,0666)) == -1){
+    if((mutexDocking = semget(MUTEX_DOCK,1,0600)) == -1){
         TEST_ERROR;
     }
-    if((mutexDocking=semctl(mutexDocking,0,SETVAL,1)) == -1){
+    if(semctl(mutexDocking,0,SETVAL,1) == -1){
         TEST_ERROR;
     }
     /*Sy Semaphore*/
@@ -219,6 +219,8 @@ int main(){
     /*iterative process for ship management*/
     do{
         nextPort = dock_access_load(currentPort->pidPort);
+        nextPort->pidPort = 0;
+        goods_on.quantity = 0;
         if(nextPort->pidPort == 0){/*Didn’t find a shipment and goes to the nearest port*/
             nextPort = nearPort(prevPort->pidPort,currentPort->pidPort,currentPort->coord);
             distanza=distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED;
@@ -235,6 +237,7 @@ int main(){
                 }
             }
         }else{
+            /*
             distanza=distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED;            
              
             req.tv_sec=(int)distanza;
@@ -253,6 +256,7 @@ int main(){
             currentPort =nextPort;
             
             dock_access_unload(currentPort->pidPort);
+            */
         }
     }while(1);
 
@@ -328,7 +332,7 @@ void docking(pid_t pid_port){
         mutex.sem_flg = 0;
         mutex.sem_num = 0;
         semop(mutexDocking,&mutex,1);
-
+        printf("port: aa %d %d %d\n",semctl(mutexDocking,0,GETVAL),mutexDocking,getpid());
         /*Semaphore Dock*/
         if((dockSem = semget(pid_port,1,0666))==-1){
             TEST_ERROR;
@@ -338,10 +342,13 @@ void docking(pid_t pid_port){
         sops.sem_flg=0;
         semop(dockSem,&sops,1);
 
+        mutex.sem_flg = 0;
+        mutex.sem_num = 0;
         mutex.sem_op = 1;
         semop(mutexDocking,&mutex,1);
 
         /*Sem ships*/
+        /*
         ship.sem_op=-1;
         ship.sem_num=0;
         ship.sem_flg=0;
@@ -351,6 +358,7 @@ void docking(pid_t pid_port){
 
         ship.sem_op = 1;
         semop(sem_ship,&ship,1);
+        */
 }
 
 /*
@@ -367,8 +375,9 @@ void undocking(pid_t pid_port){
         mutex.sem_op = -1;
         mutex.sem_flg = 0;
         mutex.sem_num = 0;
+                   
         semop(mutexDocking,&mutex,1);
-
+        printf("port: uu %d %d %d\n",semctl(mutexDocking,0,GETVAL),mutexDocking,getpid());
         /*Semaphore Dock*/
         if((dockSem = semget(pid_port,1,0666))==-1){
             TEST_ERROR;
@@ -378,10 +387,13 @@ void undocking(pid_t pid_port){
         sops.sem_flg=0;
         semop(dockSem,&sops,1);
 
+        mutex.sem_flg = 0;
+        mutex.sem_num = 0;
         mutex.sem_op = 1;
         semop(mutexDocking,&mutex,1);
 
         /*Sem ships*/
+        /*
         ship.sem_op=-1;
         ship.sem_num=0;
         ship.sem_flg=0;
@@ -391,6 +403,7 @@ void undocking(pid_t pid_port){
 
         ship.sem_op = 1;
         semop(sem_ship,&ship,1);
+        */
 }
 
 /*

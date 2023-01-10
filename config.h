@@ -42,7 +42,7 @@ int SO_MAELSTROM ;/*mealstrom repeat (hours)*/
 #define DUMP_KEY 42
 #define SY_KEY 1
 #define SHIP_KEY 40
-#define MUTEX_DOCK 10
+#define MUTEX_DOCK 15
 
 
 
