@@ -90,13 +90,6 @@ int main(){
         fprintf(stderr,"Error initializing semaphore, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
-    /*Semaphore mutex docking*/
-    if((mutexDocking = semget(MUTEX_DOCK,1,IPC_CREAT|IPC_EXCL|0666)) == -1){
-        TEST_ERROR;
-    }
-    if((mutexDocking=semctl(mutexDocking,0,SETVAL,1)) == -1){
-        TEST_ERROR;
-    }
 
     /*Shared memory for ports*/
     if((shmPort = shmget(PORT_POS_KEY,sizeof(struct port)*SO_PORTI,IPC_CREAT|IPC_EXCL|0666 )) == -1){
@@ -237,6 +230,8 @@ int main(){
     stopWeather();
     stopAllShips();
     killAllPorts();
+
+    /*Wait termination of all process*/
     while ((child_pid = wait(NULL)) != -1)
         continue;
 
@@ -560,7 +555,7 @@ Desc: send a signal to all ships to indicate termination
 void stopAllShips(){
     int i;
     for(i = 0; i< SO_NAVI;i++){
-        if(ships[i].ship != -1)
+        if(ships[i].port != -1)
             kill(ships[i].ship,SIGTERM);
     }
 }
@@ -744,14 +739,6 @@ void deallocateResources(struct goods_states* good_d,struct port_states* port_d,
         TEST_ERROR;
     }
     if((sySem=semctl(sySem,0,IPC_RMID)) == -1){
-        TEST_ERROR;
-    }
-
-    /*Sy mutex docking*/
-    if((mutexDocking = semget(MUTEX_DOCK,1,0666)) == -1){
-        TEST_ERROR;
-    }
-    if((mutexDocking=semctl(mutexDocking,0,IPC_RMID)) == -1){
         TEST_ERROR;
     }
 

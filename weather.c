@@ -147,8 +147,7 @@ int main(){
     time_in_sec=SO_MAELSTROM/24.0;
     rem.tv_sec=0;
     rem.tv_nsec=0;
-    do{
-        
+    do{        
         req.tv_sec=(int) time_in_sec;
         req.tv_nsec=(time_in_sec-(int)time_in_sec)*1000000000;
         while(nanosleep(&req,&rem)<0){
@@ -160,7 +159,7 @@ int main(){
                 req.tv_nsec=rem.tv_nsec;
             }
         }
-       /*maelstrom();*/
+       maelstrom();
     }while(1);
 
     return 0;
@@ -183,11 +182,8 @@ pid_t * ships_in_sea(int* length){
     ship_dump.sem_flg=0;
     while(semop(sem_ship,&ship_dump,1)<0){
         if(errno!=EINTR){
-            TEST_ERROR;
             break;
         }
-        else 
-            continue;
     }
           
     for(i=0;i<SO_NAVI;i++){
@@ -244,13 +240,10 @@ void storm(){
         sops_dump.sem_num=0;
         sops_dump.sem_flg=0;
         while(semop(dumpSem,&sops_dump,1)<0){
-        if(errno!=EINTR){
-            TEST_ERROR;
-            break;
+            if(errno!=EINTR){
+                break;
+            }
         }
-        else 
-            continue;
-    }
         weather_d->storm += 1;
         sops_dump.sem_op=1;
         semop(dumpSem,&sops_dump,1);   
@@ -278,12 +271,9 @@ void maelstrom(){
         sops_dump.sem_num=0;
         sops_dump.sem_flg=0;
         while(semop(dumpSem,&sops_dump,1)<0){
-            if(errno!=EINTR){
-                TEST_ERROR;
+            if(errno!=EINTR){               
                 break;
             }
-            else 
-                continue;
         }
         weather_d->maelstrom += 1;
         sops_dump.sem_op=1;

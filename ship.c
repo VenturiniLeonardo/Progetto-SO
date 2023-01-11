@@ -69,7 +69,7 @@ void signalHandler(int signal){
             swell();
         break;
         case SIGALRM:
-            ships[getPositionByShipPid()].ship = -1;
+            ships[getPositionByShipPid()].port = -1;
             restoreDemand();
             exit(EXIT_SUCCESS);
         break;
@@ -108,9 +108,9 @@ int main(){
         printf("Error set all variable\n");
         return 0;
     }
+
     /*Generation coords ship*/
     ship_coords=generateRandCoords();
-
     
     /*Shared memory ports*/
     if((shm_ports = shmget(PORT_POS_KEY,0,0666)) == -1){
@@ -170,16 +170,12 @@ int main(){
         fprintf(stderr,"Error sy semaphore creation, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
     }
-    
-    /*Mutex sem for acces dock */
-    if((mutexDocking = semget(MUTEX_DOCK,1,0666)) == -1){
-        TEST_ERROR;
-    }
+
     /*Setup handler*/
     bzero(&sa, sizeof(sa));
     sa.sa_handler = signalHandler;
     sa.sa_flags=0;
-   /* sa.sa_flags= SA_RESTART | SA_NODEFER;*/
+    sa.sa_flags= SA_RESTART | SA_NODEFER;
     sigaction(SIGUSR2,&sa,NULL);
     sigaction(SIGUSR1,&sa,NULL);
     sigaction(SIGTERM,&sa,NULL);
@@ -225,6 +221,7 @@ int main(){
         undocking(currentPort->pidPort);
         
         if(nextPort->pidPort == 0){
+            free(nextPort);
             nextPort = nearPort(prevPort->pidPort,currentPort->pidPort,currentPort->coord);
             distanza=distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED;
             req.tv_sec=(int)distanza;
@@ -254,9 +251,10 @@ int main(){
                     req.tv_nsec=rem.tv_nsec;
                 }
             }
+
             prevPort = currentPort;
             currentPort = nextPort;
-
+    
             docking(currentPort->pidPort);
 
             if(goods_on.date_expiry > 0 && goods_on.quantity > 0){
@@ -274,14 +272,14 @@ int main(){
                 }
                 goods_on.quantity = 0;
                 goods_on.date_expiry = -1;
+
+                sops_dump.sem_num=0;
+                sops_dump.sem_flg=0;
                 sops_dump.sem_op=-1;
                 while(semop(dumpSem,&sops_dump,1)<0){
                     if(errno!=EINTR){
-                        TEST_ERROR;
                         break;
                     }
-                    else
-                        continue;
                 }
                 /*Dump goods*/
                 good_d[goods_on.type-1].goods_delivered += goods_on.quantity*size;
@@ -365,15 +363,6 @@ void docking(pid_t pid_port){
     struct sembuf sops_dump;
     struct sembuf ship_dump;
     
-
-    /*ship_dump.sem_op=-1;
-    ship_dump.sem_num=0;
-    ship_dump.sem_flg=0;
-    semop(sem_ship,&ship_dump,1);
-    ships[getPositionByShipPid()].ship = pid_port;
-    ship_dump.sem_op=1;
-    semop(sem_ship,&ship_dump,1);*/
-    
     if((dockSem = semget(pid_port,1,0666)) == -1)
         TEST_ERROR;
 
@@ -382,23 +371,33 @@ void docking(pid_t pid_port){
     sops.sem_op = -1;
     while(semop(dockSem,&sops,1)<0){
         if(errno!=EINTR){
-            TEST_ERROR;
             break;
         }
-        else 
-            continue;
     }
-             
+
+    /*Ships info port*/
+    ship_dump.sem_op=-1;
+    ship_dump.sem_num=0;
+    ship_dump.sem_flg=0;
+
+    while(semop(sem_ship,&ship_dump,1)<0){
+        if(errno!=EINTR){
+            break;
+        }
+    }
+    ships[getPositionByShipPid()].port = pid_port;
+
+    ship_dump.sem_op=1;
+    semop(sem_ship,&ship_dump,1);
+
+    /*Dump*/
     sops_dump.sem_op=-1;
     sops_dump.sem_num=0;
     sops_dump.sem_flg=0;
     while(semop(dumpSem,&sops_dump,1)<0){
         if(errno!=EINTR){
-             TEST_ERROR;
-             break;
+            break;
         }
-        else 
-            continue;
     }
 
     if(goods_on.date_expiry > 0 && goods_on.quantity > 0){
@@ -408,7 +407,6 @@ void docking(pid_t pid_port){
         ship_d->ship_in_port += 1;
         ship_d->ship_sea_no_goods -= 1;
     }
-
 
     /*Dump ports*/
     port_d[get_index_from_pid(pid_port)].dock_occuped += 1;
@@ -427,13 +425,18 @@ void undocking(pid_t pid_port){
     struct sembuf sops_dump;
     struct sembuf ship_dump;
 
-    /*ship_dump.sem_num=0;
-    ship_dump.sem_flg=0;
+    /*Ship out port*/
     ship_dump.sem_op=-1;
-    semop(sem_ship,&ship_dump,1);
-    ships[getPositionByShipPid()].ship = 0;
+    ship_dump.sem_num=0;
+    ship_dump.sem_flg=0;
+    while(semop(sem_ship,&ship_dump,1)<0){
+        if(errno!=EINTR){
+            break;
+        }
+    }
+    ships[getPositionByShipPid()].port = 0;
     ship_dump.sem_op=1;
-    semop(sem_ship,&ship_dump,1);*/
+    semop(sem_ship,&ship_dump,1);
 
     sops.sem_flg = 0;
     sops.sem_num = 0;
@@ -447,11 +450,8 @@ void undocking(pid_t pid_port){
     sops_dump.sem_op=-1;
     while(semop(dumpSem,&sops_dump,1)<0){
         if(errno!=EINTR){
-            TEST_ERROR;
             break;
         }
-        else 
-            continue;
     }
 
     if(goods_on.quantity == 0){
@@ -524,11 +524,8 @@ struct port* getSupply(pid_t pid_port){
         sops.sem_flg=0;
         while(semop(semSupply,&sops,1)<0){
             if(errno!=EINTR){
-                TEST_ERROR;
                 break;
             }
-            else 
-                continue;
         }
 
         
@@ -632,11 +629,8 @@ struct port* getSupply(pid_t pid_port){
                     sops_dump.sem_flg=0;
                     while(semop(dumpSem,&sops_dump,1)<0){
                         if(errno!=EINTR){
-                            TEST_ERROR;
                             break;
                         }
-                        else 
-                            continue;
                     }
 
                     port_d[get_index_from_pid(pid_port)].goods_sended+=goods_on.quantity*size; 
@@ -662,11 +656,8 @@ struct port* getSupply(pid_t pid_port){
                     sops_dump.sem_op=-1;
                      while(semop(dumpSem,&sops_dump,1)<0){
                         if(errno!=EINTR){
-                            TEST_ERROR;
                             break;
                         }
-                        else 
-                            continue;
                     }
                     good_d[goods_on.type-1].goods_on_ship += goods_on.quantity*size;
                     good_d[goods_on.type-1].goods_in_port -= goods_on.quantity*size;
@@ -704,8 +695,13 @@ struct port* getSupply(pid_t pid_port){
 
 
         if(flagGood){
+            sendPort = (struct port*)malloc(sizeof(struct port));
+            sendPort->coord.x = portNear[i].coord.x;
+            sendPort->coord.y = portNear[i].coord.y;
+            sendPort->pidPort = portNear[i].pidPort;
             demandPort = portNear[i].pidPort;
-            return &portNear[i];
+            free(portNear);
+            return sendPort;
         }else{
             /*Return empty port*/
             sendPort = (struct port*)malloc(sizeof(struct port));
@@ -715,6 +711,7 @@ struct port* getSupply(pid_t pid_port){
             goods_on.quantity = 0;
             goods_on.date_expiry = -1;
             demandPort = 0;
+            free(portNear);
             return sendPort;
         }
         
@@ -865,13 +862,10 @@ void restoreDemand(){
             exit(EXIT_FAILURE);
         }
         sops_dump.sem_op=-1;
-         while(semop(dumpSem,&sops_dump,1)<0){
+        while(semop(dumpSem,&sops_dump,1)<0){
             if(errno!=EINTR){
-                TEST_ERROR;
                 break;
             }
-            else 
-                continue;
         }
 
         /*Dump ships*/  
@@ -886,11 +880,8 @@ void restoreDemand(){
         sops_dump.sem_op=-1;
         while(semop(dumpSem,&sops_dump,1)<0){
             if(errno!=EINTR){
-                TEST_ERROR;
                 break;
             }
-            else 
-                continue;
         }
         /*Dump ships*/  
         ship_d->ship_sea_no_goods -= 1;
@@ -927,16 +918,15 @@ void reloadExpiryDate(){
         if(goods_on.date_expiry >= 1)
             goods_on.date_expiry-=1;
         else{/*expired*/
+
             goods_on.date_expiry = -1;
             goods_on.quantity = 0;
+
             sops_dump.sem_op=-1;
              while(semop(dumpSem,&sops_dump,1)<0){
                 if(errno!=EINTR){
-                    TEST_ERROR;
                     break;
                 }
-                else 
-                    continue;
             }
             /*Dump goods*/ 
             good_d[goods_on.type-1].goods_expired_ship += goods_on.quantity*size;
