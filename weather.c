@@ -234,7 +234,6 @@ void storm(){
         srand(time(NULL));
         index=rand()%length;
         kill(ships_sea[index],SIGUSR2);
-
         /*Dump*/
         sops_dump.sem_op=-1;
         sops_dump.sem_num=0;

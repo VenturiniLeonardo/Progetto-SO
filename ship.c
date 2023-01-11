@@ -23,12 +23,12 @@ struct coords generateRandCoords();
 double distance(double,double,double,double);
 void docking(pid_t);
 void undocking(pid_t);
-struct port* getSupply(pid_t);
+int getSupply(pid_t);
 struct port* near_ports(pid_t,double,int *);
 struct port* dock_access_load(pid_t);
 void dock_access_unload(pid_t);
 struct coords getCoordFromPid(int);
-struct port* nearPort(pid_t,pid_t ,struct coords);
+int nearPort(pid_t,pid_t ,struct coords);
 int get_index_from_pid(pid_t);
 void deallocateResources();
 int getMaxExpiryDate(struct shmSinglePort[]);
@@ -55,9 +55,12 @@ int mutexDocking;
 int time_expry_on;
 int size;
 int dockSem;
+int inDump = 0;
+int inPort = 0;
 
 /*Handler*/
 void signalHandler(int signal){
+    struct sembuf ship_dump;
     switch(signal){
         case SIGUSR2:
             storm_sleep();
@@ -69,7 +72,7 @@ void signalHandler(int signal){
             swell();
         break;
         case SIGALRM:
-            ships[getPositionByShipPid()].port = -1;
+            ships[getPositionByShipPid(getpid())].port = -1;
             restoreDemand();
             exit(EXIT_SUCCESS);
         break;
@@ -89,10 +92,10 @@ int main(){
     int sySem;
     int shmPort;
     struct sembuf sops; 
-    struct port* prevPort;  
+    int prevPort;  
     struct coords ship_coords;
-    struct port* nextPort;
-    struct port* currentPort;
+    int nextPort;
+    int currentPort;
     struct sigaction sa;
     sigset_t mask;
     int i = 0;
@@ -102,7 +105,6 @@ int main(){
     double distanza;
     int shmShip;
     struct sembuf sops_dump;
-    struct sembuf semaphore;
     
     if(variableUpdate()){
         printf("Error set all variable\n");
@@ -200,7 +202,7 @@ int main(){
     /*At start Ship goes to nearest port*/
     currentPort = prevPort = nearPort(0,0,ship_coords);
 
-    distanza=distance(currentPort->coord.x,currentPort->coord.y,ship_coords.x,ship_coords.y)/SO_SPEED;
+    distanza=distance(ports[currentPort].coord.x,ports[currentPort].coord.y,ship_coords.x,ship_coords.y)/SO_SPEED;
     rem.tv_sec=0;
     rem.tv_nsec=0;
     req.tv_sec=(int)distanza;
@@ -216,14 +218,13 @@ int main(){
 
     /*iterative process for ship management*/   
     do{
-        docking(currentPort->pidPort);
-        nextPort = getSupply(currentPort->pidPort);
-        undocking(currentPort->pidPort);
+        docking(ports[currentPort].pidPort);
+        nextPort = getSupply(ports[currentPort].pidPort);
+        undocking(ports[currentPort].pidPort);
         
-        if(nextPort->pidPort == 0){
-            free(nextPort);
-            nextPort = nearPort(prevPort->pidPort,currentPort->pidPort,currentPort->coord);
-            distanza=distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED;
+        if(nextPort == -1){
+            nextPort = nearPort(ports[prevPort].pidPort,ports[currentPort].pidPort,ports[currentPort].coord);
+            distanza=distance(ports[nextPort].coord.x,ports[nextPort].coord.y,ports[nextPort].coord.x,ports[nextPort].coord.y)/SO_SPEED;
             req.tv_sec=(int)distanza;
             req.tv_nsec=(distanza-(int)distanza)*1000000000;
             prevPort = currentPort;
@@ -238,7 +239,7 @@ int main(){
             }
             
         }else{
-            distanza=distance(nextPort->coord.x,nextPort->coord.y,currentPort->coord.x,currentPort->coord.y)/SO_SPEED;            
+            distanza=distance(ports[nextPort].coord.x,ports[nextPort].coord.y,ports[currentPort].coord.x,ports[currentPort].coord.y)/SO_SPEED;            
             
             req.tv_sec=(int)distanza;
             req.tv_nsec=(distanza-(int)distanza)*1000000000;
@@ -255,10 +256,9 @@ int main(){
             prevPort = currentPort;
             currentPort = nextPort;
     
-            docking(currentPort->pidPort);
+            docking(ports[currentPort].pidPort);
 
             if(goods_on.date_expiry > 0 && goods_on.quantity > 0){
-
                 distanza=(goods_on.quantity*size)/SO_LOADSPEED;
                 req.tv_sec=(int)distanza;
                 req.tv_nsec= (distanza-(int)distanza)*1000000000;
@@ -270,8 +270,6 @@ int main(){
                         req.tv_nsec=rem.tv_nsec;
                     }
                 }
-                goods_on.quantity = 0;
-                goods_on.date_expiry = -1;
 
                 sops_dump.sem_num=0;
                 sops_dump.sem_flg=0;
@@ -281,17 +279,22 @@ int main(){
                         break;
                     }
                 }
+                inDump = 1;
                 /*Dump goods*/
                 good_d[goods_on.type-1].goods_delivered += goods_on.quantity*size;
                 good_d[goods_on.type-1].goods_on_ship -= goods_on.quantity*size;
                 /*Dump ports*/
-                port_d[get_index_from_pid(currentPort->pidPort)].goods_receved +=goods_on.quantity*size;
-                port_d[get_index_from_pid(currentPort->pidPort)].goods_demand -=goods_on.quantity*size;
+                port_d[currentPort].goods_receved +=goods_on.quantity*size;
+                port_d[currentPort].goods_demand -=goods_on.quantity*size;
                 sops_dump.sem_op=1;
                 semop(dumpSem,&sops_dump,1);
+                inDump = 0;
+
+                goods_on.quantity = 0;
+                goods_on.date_expiry = -1;
             }
             
-            undocking(currentPort->pidPort);
+            undocking(ports[currentPort].pidPort);
         }
 
     }while(1);
@@ -308,12 +311,12 @@ Input: pid_t, pid_t, struct coords
 Output: struct port*
 Desc: return struct port pointer to the nearest port with different pid than current and previous
 */
-struct port* nearPort(pid_t prevPort,pid_t pidPort,struct coords ship_coords){
+int nearPort(pid_t prevPort,pid_t pidPort,struct coords ship_coords){
 
     int min_distance=SO_LATO*sqrt(2);
     int i;
-    int ris_distanza;
-    int index_min;
+    int ris_distanza = 0;
+    int index_min = 0;
 
     for(i=0;i<SO_PORTI;i++){
         ris_distanza=distance(ports[i].coord.x,ports[i].coord.y,ship_coords.x,ship_coords.y);
@@ -321,10 +324,8 @@ struct port* nearPort(pid_t prevPort,pid_t pidPort,struct coords ship_coords){
             min_distance=ris_distanza;
             index_min = i;
         }
-    }   
-
-        
-    return &(ports[index_min]);
+    }          
+    return index_min;
 }
 
 /*
@@ -385,6 +386,7 @@ void docking(pid_t pid_port){
             break;
         }
     }
+    inPort = 1;
     ships[getPositionByShipPid()].port = pid_port;
 
     ship_dump.sem_op=1;
@@ -399,7 +401,7 @@ void docking(pid_t pid_port){
             break;
         }
     }
-
+    inDump = 1;
     if(goods_on.date_expiry > 0 && goods_on.quantity > 0){
         ship_d->ship_in_port += 1;
         ship_d->ship_sea_goods -= 1;
@@ -412,7 +414,8 @@ void docking(pid_t pid_port){
     port_d[get_index_from_pid(pid_port)].dock_occuped += 1;
 
     sops_dump.sem_op=1;
-    semop(dumpSem,&sops_dump,1);    
+    semop(dumpSem,&sops_dump,1);  
+    inDump = 0;  
 }
 
 /*
@@ -434,10 +437,11 @@ void undocking(pid_t pid_port){
             break;
         }
     }
+    inPort = 1;
     ships[getPositionByShipPid()].port = 0;
     ship_dump.sem_op=1;
     semop(sem_ship,&ship_dump,1);
-
+    
     sops.sem_flg = 0;
     sops.sem_num = 0;
     sops.sem_op = 1;
@@ -453,7 +457,7 @@ void undocking(pid_t pid_port){
             break;
         }
     }
-
+    inDump = 1;
     if(goods_on.quantity == 0){
         ship_d->ship_in_port -= 1;
         ship_d->ship_sea_no_goods += 1;
@@ -466,6 +470,7 @@ void undocking(pid_t pid_port){
     port_d[get_index_from_pid(pid_port)].dock_occuped -= 1;
     sops_dump.sem_op=1;
     semop(dumpSem,&sops_dump,1);
+    inDump = 0;
 }
 
 /*
@@ -489,7 +494,7 @@ Input: pid_t
 Output: struct port*
 Desc: returns a struct port pointer containing the next port or an empty port if it finds nothing
 */
-struct port* getSupply(pid_t pid_port){
+int getSupply(pid_t pid_port){
         key_t supplyKey;
         int semSupply;
         int shmSupply;
@@ -555,15 +560,11 @@ struct port* getSupply(pid_t pid_port){
             sops.sem_op =1;
             sops.sem_flg=0;
             semop(semSupply,&sops,1);
-            
-            sendPort = (struct port*)malloc(sizeof(struct port));
-            sendPort->coord.x = -1;
-            sendPort->coord.y = -1;
-            sendPort->pidPort = 0;
+
             goods_on.quantity = 0;
             goods_on.date_expiry = -1;
             shmdt(shmPort);
-            return sendPort;
+            return -1;
         }
 
         /*Set min exipry to prev min exipry*/
@@ -632,13 +633,13 @@ struct port* getSupply(pid_t pid_port){
                             break;
                         }
                     }
-
+                    inDump = 1;
                     port_d[get_index_from_pid(pid_port)].goods_sended+=goods_on.quantity*size; 
                     port_d[get_index_from_pid(pid_port)].goods_offer-=goods_on.quantity*size; 
                     
                     sops_dump.sem_op=1;
                     semop(dumpSem,&sops_dump,1);
-                    
+                    inDump = 0;
                     
                     time_nanosleep=(goods_on.quantity*size)/SO_LOADSPEED;
                     req.tv_sec=(int)time_nanosleep;
@@ -659,11 +660,12 @@ struct port* getSupply(pid_t pid_port){
                             break;
                         }
                     }
+                    inDump = 1;
                     good_d[goods_on.type-1].goods_on_ship += goods_on.quantity*size;
                     good_d[goods_on.type-1].goods_in_port -= goods_on.quantity*size;
                     sops_dump.sem_op=1;
                     semop(dumpSem,&sops_dump,1);
-
+                    inDump = 0;
                     flagGood = 1;
                     break;
                 }
@@ -695,24 +697,16 @@ struct port* getSupply(pid_t pid_port){
 
 
         if(flagGood){
-            sendPort = (struct port*)malloc(sizeof(struct port));
-            sendPort->coord.x = portNear[i].coord.x;
-            sendPort->coord.y = portNear[i].coord.y;
-            sendPort->pidPort = portNear[i].pidPort;
             demandPort = portNear[i].pidPort;
             free(portNear);
-            return sendPort;
+            return i;
         }else{
             /*Return empty port*/
-            sendPort = (struct port*)malloc(sizeof(struct port));
-            sendPort->coord.x = -1;
-            sendPort->coord.y = -1;
-            sendPort->pidPort = 0;
             goods_on.quantity = 0;
             goods_on.date_expiry = -1;
             demandPort = 0;
             free(portNear);
-            return sendPort;
+            return -1;
         }
         
 }
@@ -867,7 +861,7 @@ void restoreDemand(){
                 break;
             }
         }
-
+        inDump = 1;
         /*Dump ships*/  
         ship_d->ship_sea_goods -= 1;
         /*Dump good*/  
@@ -875,7 +869,7 @@ void restoreDemand(){
         good_d[goods_on.type-1].goods_expired_ship += goods_on.quantity*size;
         sops_dump.sem_op=1;
         semop(dumpSem,&sops_dump,1);
-
+        inDump = 0;
     }else{/*Without goods*/
         sops_dump.sem_op=-1;
         while(semop(dumpSem,&sops_dump,1)<0){
@@ -883,10 +877,12 @@ void restoreDemand(){
                 break;
             }
         }
+        inDump = 1;
         /*Dump ships*/  
         ship_d->ship_sea_no_goods -= 1;
         sops_dump.sem_op=1;
         semop(dumpSem,&sops_dump,1);
+        inDump = 0;
     }
 }
 
@@ -910,30 +906,38 @@ Desc: when receiving a signal updates the expiry date
 void reloadExpiryDate(){
     struct sembuf sops_dump;
     struct sembuf ship_dump;
+
     sops_dump.sem_flg=0;
     sops_dump.sem_num=0;
-    ship_dump.sem_flg=0;
-    ship_dump.sem_num=0;
-    if(goods_on.quantity != 0 && ships[getPositionByShipPid(getpid())].port == 0){      
-        if(goods_on.date_expiry >= 1)
+    if(goods_on.quantity != 0 &&  inPort == 0){   
+        if(goods_on.date_expiry >= 1){
             goods_on.date_expiry-=1;
-        else{/*expired*/
+        }else{/*expired*/
 
             goods_on.date_expiry = -1;
             goods_on.quantity = 0;
-
-            sops_dump.sem_op=-1;
-             while(semop(dumpSem,&sops_dump,1)<0){
-                if(errno!=EINTR){
-                    break;
-                }
-            }
             /*Dump goods*/ 
-            good_d[goods_on.type-1].goods_expired_ship += goods_on.quantity*size;
-            ship_d->ship_sea_goods -= 1;
-            ship_d->ship_sea_no_goods += 1;   
-            sops_dump.sem_op=1;
-            semop(dumpSem,&sops_dump,1);           
+            if(inDump && semop(dumpSem,0,GETVAL) == 0){  
+                good_d[goods_on.type-1].goods_expired_ship += goods_on.quantity*size;
+                ship_d->ship_sea_goods -= 1;
+                ship_d->ship_sea_no_goods += 1; 
+            }else{
+                sops_dump.sem_op=-1;
+                while(semop(dumpSem,&sops_dump,1)<0){
+                    if(errno!=EINTR){
+                        break;
+                    }
+                }
+                inDump = 1;
+                good_d[goods_on.type-1].goods_expired_ship += goods_on.quantity*size;
+                ship_d->ship_sea_goods -= 1;
+                ship_d->ship_sea_no_goods += 1; 
+
+                sops_dump.sem_op=1;
+                semop(dumpSem,&sops_dump,1);
+                inDump = 0;
+            }
+      
 
         }
     }
