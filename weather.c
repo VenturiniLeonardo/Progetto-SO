@@ -235,7 +235,7 @@ void storm(){
         index=rand()%length;
         kill(ships_sea[index],SIGUSR2);
         /*Dump*/
-        if(semctl(dumpSem,0,GETPID) == getpid() && semop(dumpSem,0,GETVAL) == 0){
+        if(semctl(dumpSem,0,GETPID) == getpid() && semctl(dumpSem,0,GETVAL) == 0){
             weather_d->storm += 1;
         }else{
             sops_dump.sem_op=-1;

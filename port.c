@@ -223,9 +223,9 @@ void generatorDailySupply(){
         TEST_ERROR;
     }
 
-    if(semctl(semSupply,0,GETPID) == getpid() && semop(semSupply,0,GETVAL) == 0){
+    if(semctl(semSupply,0,GETPID) == getpid() && semctl(semSupply,0,GETVAL) == 0){
 
-        if(semctl(dumpSem,0,GETPID) == getpid() && semop(dumpSem,0,GETVAL) == 0){
+        if(semctl(dumpSem,0,GETPID) == getpid() && semctl(dumpSem,0,GETVAL) == 0){
         
             if(shmPort[msg_Supply.type-1].demandGoods==0 && port_d[my_index].goods_offer+msg_Supply.quantity*info_goods[msg_Supply.type-1].size<=SO_FILL){
                 shmPort[msg_Supply.type-1].supplyGoods=1;
@@ -275,7 +275,7 @@ void generatorDailySupply(){
             }
         }
 
-        if(semctl(dumpSem,0,GETPID) == getpid() && semop(dumpSem,0,GETVAL) == 0){
+        if(semctl(dumpSem,0,GETPID) == getpid() && semctl(dumpSem,0,GETVAL) == 0){
         
             if(shmPort[msg_Supply.type-1].demandGoods==0 && port_d[my_index].goods_offer+msg_Supply.quantity*info_goods[msg_Supply.type-1].size<=SO_FILL){
                 shmPort[msg_Supply.type-1].supplyGoods=1;
@@ -413,7 +413,7 @@ void reloadExpiryDate(){
     
 
     /*INSERT SUPPLY INTO SHM*/
-    if(semctl(semSupply,0,GETPID) == getpid() && semop(semSupply,0,GETVAL) == 0){
+    if(semctl(semSupply,0,GETPID) == getpid() && semctl(semSupply,0,GETVAL) == 0){
 
         for(i=0;i<SO_MERCI;i++){
             if(shmPort[i].supplyGoods == 1){
@@ -641,7 +641,7 @@ void swell(){
     struct timespec rem;
     int semVal;
     double time_swell;
-    if(semctl(dumpSem,0,GETPID) == getpid() && semop(dumpSem,0,GETVAL) == 0){
+    if(semctl(dumpSem,0,GETPID) == getpid() && semctl(dumpSem,0,GETVAL) == 0){
         port_d[my_index].swell = 1;
     }else{
         sops_dump.sem_op=-1;
