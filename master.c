@@ -152,7 +152,6 @@ int main(){
     }
 
     /*Shared memory for dump of ship*/
-
     if((shm_dump_ship=shmget(SHIP_DUMP_KEY,sizeof(struct ship_dump),IPC_CREAT |IPC_EXCL|0666)) == -1){
         fprintf(stderr,"Error shared memory ship dump creation in master, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
@@ -204,6 +203,7 @@ int main(){
     sops.sem_op=0;
     semop(sySem,&sops,1);
 
+    /*Starting simulation...*/
     printf("START...\n");
     
     elapsedDays=0; 
@@ -226,7 +226,6 @@ int main(){
     }
 
     /*Kill all process*/ 
-
     stopWeather();
     stopAllShips();
     killAllPorts();
@@ -235,6 +234,7 @@ int main(){
     while ((child_pid = wait(NULL)) != -1)
         continue;
 
+    /*Termination procedure*/
     printFinalDump(struct_goods_dump,struct_port_dump,struct_ship_dump,weather_d);
 
     deallocateResources(struct_goods_dump,struct_port_dump,struct_ship_dump,weather_d);
@@ -394,19 +394,20 @@ Desc: Generation weather
 */
 void weatherGenerator(){
     int sonPid;
+
     switch (sonPid=fork()){
-    case -1:
-        fprintf(stderr,"Error in fork , %d: %s \n",errno,strerror(errno));
-        exit(EXIT_FAILURE);
-    case 0: 
-        if(execlp("./weather","./weather",NULL) == -1){
-            fprintf(stderr,"Error in execl ship num, %d: %s \n",errno,strerror(errno));
+        case -1:
+            fprintf(stderr,"Error in fork , %d: %s \n",errno,strerror(errno));
             exit(EXIT_FAILURE);
-        }
-        break;
-    default:
-        weatherPid = sonPid;
-        break;
+        case 0: 
+            if(execlp("./weather","./weather",NULL) == -1){
+                fprintf(stderr,"Error in execl ship num, %d: %s \n",errno,strerror(errno));
+                exit(EXIT_FAILURE);
+            }
+            break;
+        default:
+            weatherPid = sonPid;
+            break;
     }
 }
 
@@ -421,6 +422,7 @@ int printDump(int dSem, struct goods_states* good_d,struct port_states* port_d,s
     int i;
     int allOffer = 1;
     int allDemand = 1;
+
     sops_dump.sem_num=0;
     sops_dump.sem_op=-1;
     sops_dump.sem_flg=0;
@@ -677,6 +679,7 @@ void generatorDailySupply(){
 
     num_ports=rand()%SO_PORTI+1;
     ports_Supply=malloc(sizeof(pid_t)*num_ports);
+
     while(i<num_ports){
         index_prec = index_port;
         index_port=rand()%SO_PORTI;
@@ -692,6 +695,7 @@ void generatorDailySupply(){
             i++;
         }
     }
+
     free(ports_Supply);
 }
 
@@ -702,6 +706,7 @@ Desc: send a signal to ships and ports to update the expiration date of the good
 */
 void updateDateExpiry(){
     int i;
+    
     for(i = 0; i< SO_PORTI;i++){
         kill(ports[i].pidPort,SIGUSR1);
     }
