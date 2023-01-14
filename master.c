@@ -64,7 +64,9 @@ int main(){
     int shmShip;
     int shmWeather;
     int mutexDocking;
+    int child_pid;
     struct sembuf sops; 
+    struct timespec req;
 
     if(variableUpdate()){
         printf("Error set all variable\n");
@@ -87,13 +89,6 @@ int main(){
     if(semctl(sySem,0,SETVAL,SO_NAVI+SO_PORTI+2)<0){
         fprintf(stderr,"Error initializing semaphore, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
-    }
-    /*Semaphore mutex docking*/
-    if((mutexDocking = semget(MUTEX_DOCK,1,IPC_CREAT|IPC_EXCL|0666)) == -1){
-        TEST_ERROR;
-    }
-    if((mutexDocking=semctl(mutexDocking,0,SETVAL,1)) == -1){
-        TEST_ERROR;
     }
 
     /*Shared memory for ports*/
@@ -157,7 +152,6 @@ int main(){
     }
 
     /*Shared memory for dump of ship*/
-
     if((shm_dump_ship=shmget(SHIP_DUMP_KEY,sizeof(struct ship_dump),IPC_CREAT |IPC_EXCL|0666)) == -1){
         fprintf(stderr,"Error shared memory ship dump creation in master, %d: %s\n",errno,strerror(errno));
         exit(EXIT_FAILURE);
@@ -209,14 +203,17 @@ int main(){
     sops.sem_op=0;
     semop(sySem,&sops,1);
 
+    /*Starting simulation...*/
     printf("START...\n");
     
     elapsedDays=0; 
+    req.tv_sec=1;
+    req.tv_nsec=0;
 
     /*days and dump management*/
     while(elapsedDays<SO_DAYS){
         generatorDailySupply();
-        sleep(1);
+        nanosleep(&req,NULL);
         kill(weatherPid,SIGUSR1);
         printf("Day %d\n",elapsedDays+1);
         updateDateExpiry();
@@ -233,6 +230,11 @@ int main(){
     stopAllShips();
     killAllPorts();
 
+    /*Wait termination of all process*/
+    while ((child_pid = wait(NULL)) != -1)
+        continue;
+
+    /*Termination procedure*/
     printFinalDump(struct_goods_dump,struct_port_dump,struct_ship_dump,weather_d);
 
     deallocateResources(struct_goods_dump,struct_port_dump,struct_ship_dump,weather_d);
@@ -392,19 +394,20 @@ Desc: Generation weather
 */
 void weatherGenerator(){
     int sonPid;
+
     switch (sonPid=fork()){
-    case -1:
-        fprintf(stderr,"Error in fork , %d: %s \n",errno,strerror(errno));
-        exit(EXIT_FAILURE);
-    case 0: 
-        if(execlp("./weather","./weather",NULL) == -1){
-            fprintf(stderr,"Error in execl ship num, %d: %s \n",errno,strerror(errno));
+        case -1:
+            fprintf(stderr,"Error in fork , %d: %s \n",errno,strerror(errno));
             exit(EXIT_FAILURE);
-        }
-        break;
-    default:
-        weatherPid = sonPid;
-        break;
+        case 0: 
+            if(execlp("./weather","./weather",NULL) == -1){
+                fprintf(stderr,"Error in execl ship num, %d: %s \n",errno,strerror(errno));
+                exit(EXIT_FAILURE);
+            }
+            break;
+        default:
+            weatherPid = sonPid;
+            break;
     }
 }
 
@@ -419,6 +422,7 @@ int printDump(int dSem, struct goods_states* good_d,struct port_states* port_d,s
     int i;
     int allOffer = 1;
     int allDemand = 1;
+
     sops_dump.sem_num=0;
     sops_dump.sem_op=-1;
     sops_dump.sem_flg=0;
@@ -553,7 +557,7 @@ Desc: send a signal to all ships to indicate termination
 void stopAllShips(){
     int i;
     for(i = 0; i< SO_NAVI;i++){
-        if(ships[i].ship != 0)
+        if(ships[i].port != -1)
             kill(ships[i].ship,SIGTERM);
     }
 }
@@ -675,6 +679,7 @@ void generatorDailySupply(){
 
     num_ports=rand()%SO_PORTI+1;
     ports_Supply=malloc(sizeof(pid_t)*num_ports);
+
     while(i<num_ports){
         index_prec = index_port;
         index_port=rand()%SO_PORTI;
@@ -690,6 +695,7 @@ void generatorDailySupply(){
             i++;
         }
     }
+
     free(ports_Supply);
 }
 
@@ -700,13 +706,15 @@ Desc: send a signal to ships and ports to update the expiration date of the good
 */
 void updateDateExpiry(){
     int i;
+    
     for(i = 0; i< SO_PORTI;i++){
         kill(ports[i].pidPort,SIGUSR1);
     }
     
     for(i = 0;i<SO_NAVI;i++){
-        if(ships[i].ship != 0)
+        if(ships[i].ship != 0){}
             kill(ships[i].ship,SIGUSR1);
+
     }
 
 }
@@ -736,14 +744,6 @@ void deallocateResources(struct goods_states* good_d,struct port_states* port_d,
         TEST_ERROR;
     }
     if((sySem=semctl(sySem,0,IPC_RMID)) == -1){
-        TEST_ERROR;
-    }
-
-    /*Sy mutex docking*/
-    if((mutexDocking = semget(MUTEX_DOCK,1,0666)) == -1){
-        TEST_ERROR;
-    }
-    if((mutexDocking=semctl(mutexDocking,0,IPC_RMID)) == -1){
         TEST_ERROR;
     }
 
@@ -860,4 +860,3 @@ void deallocateResources(struct goods_states* good_d,struct port_states* port_d,
 
 
 }
-

@@ -129,7 +129,7 @@ int main(){
     /*Setup handler*/
     bzero(&sa, sizeof(sa));
     sa.sa_handler = signalHandler;
-    sa.sa_flags=SA_RESTART|SA_NODEFER;
+    sa.sa_flags= SA_NODEFER;
     sigaction(SIGUSR1,&sa,NULL);
     sigaction(SIGTERM,&sa,NULL);
 
@@ -147,8 +147,7 @@ int main(){
     time_in_sec=SO_MAELSTROM/24.0;
     rem.tv_sec=0;
     rem.tv_nsec=0;
-    do{
-        
+    do{        
         req.tv_sec=(int) time_in_sec;
         req.tv_nsec=(time_in_sec-(int)time_in_sec)*1000000000;
         while(nanosleep(&req,&rem)<0){
@@ -160,7 +159,7 @@ int main(){
                 req.tv_nsec=rem.tv_nsec;
             }
         }
-        maelstrom();
+       maelstrom();
     }while(1);
 
     return 0;
@@ -181,10 +180,14 @@ pid_t * ships_in_sea(int* length){
     ship_dump.sem_op=-1;
     ship_dump.sem_num=0;
     ship_dump.sem_flg=0;
-    semop(sem_ship,&ship_dump,1);
+    while(semop(sem_ship,&ship_dump,1)<0){
+        if(errno!=EINTR){
+            break;
+        }
+    }
           
     for(i=0;i<SO_NAVI;i++){
-        if(ships[i].ship != 0 && ships[i].port == 0){
+        if(ships[i].port == 0){
             ships_sea[j] = ships[i].ship;
 
             j++;
@@ -215,13 +218,6 @@ void swell(){
     srand(time(NULL));
     posPort = rand()%SO_PORTI;
     kill(ports[posPort].pidPort,SIGUSR2);
-    sops_dump.sem_op=-1;
-    sops_dump.sem_num=0;
-    sops_dump.sem_flg=0;
-    semop(dumpSem,&sops_dump,1);
-    port_d[getIndexFromPid(ports[posPort].pidPort)].swell = 1;
-    sops_dump.sem_op=1;
-    semop(dumpSem,&sops_dump,1);    
 }
 
 /*
@@ -238,15 +234,23 @@ void storm(){
         srand(time(NULL));
         index=rand()%length;
         kill(ships_sea[index],SIGUSR2);
-
         /*Dump*/
-        sops_dump.sem_op=-1;
-        sops_dump.sem_num=0;
-        sops_dump.sem_flg=0;
-        semop(dumpSem,&sops_dump,1);
-        weather_d->storm += 1;
-        sops_dump.sem_op=1;
-        semop(dumpSem,&sops_dump,1);   
+        if(semctl(dumpSem,0,GETPID) == getpid() && semop(dumpSem,0,GETVAL) == 0){
+            weather_d->storm += 1;
+        }else{
+            sops_dump.sem_op=-1;
+            sops_dump.sem_num=0;
+            sops_dump.sem_flg=0;
+            while(semop(dumpSem,&sops_dump,1)<0){
+                if(errno!=EINTR){
+                    fprintf(stderr,"Error in semop, %d: %s\n",errno,strerror(errno));
+                    break;
+                }
+            }
+            weather_d->storm += 1;
+            sops_dump.sem_op=1;
+            semop(dumpSem,&sops_dump,1);   
+        }
     }
     free(ships_sea);
 }
@@ -265,12 +269,15 @@ void maelstrom(){
     if(ships_sea != NULL){
         randShip=rand()%length;  
         kill(ships_sea[randShip],SIGALRM);
-
         /*Dump*/
         sops_dump.sem_op=-1;
         sops_dump.sem_num=0;
         sops_dump.sem_flg=0;
-        semop(dumpSem,&sops_dump,1);
+        while(semop(dumpSem,&sops_dump,1)<0){
+            if(errno!=EINTR){               
+                break;
+            }
+        }
         weather_d->maelstrom += 1;
         sops_dump.sem_op=1;
         semop(dumpSem,&sops_dump,1);   
@@ -339,7 +346,6 @@ void deallocateResources(){
     shmdt(weather_d);
 
 }  
-
 
 
 

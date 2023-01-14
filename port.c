@@ -40,7 +40,7 @@ struct ship_condition * ships;
 int msg_generator_supply;
 struct good_info *info_goods;
 
-/*Handler*/
+/*Handler Port*/
 void signalHandler(int signal){
     switch(signal){
         case SIGUSR2:
@@ -78,6 +78,7 @@ int main(int argc,char*argv[]){
     int shm_dump_goods;
     int shmShip;
     int shmGoods;
+    
 
     my_index=atoi(argv[1]);
 
@@ -129,7 +130,7 @@ int main(int argc,char*argv[]){
     /*Sem creation for Supply */
     if((semSupply=semget(getpid()*2,1,IPC_CREAT|IPC_EXCL|0666)) == 1)
         TEST_ERROR;
-    /*printf(" --> %d %d\n",key_semSupply,semSupply);*/
+
     if(semctl(semSupply,0,SETVAL,1)==-1){
         TEST_ERROR;
     }
@@ -165,16 +166,14 @@ int main(int argc,char*argv[]){
         TEST_ERROR;
     
     info_goods = (struct good_info*) shmat(shmGoods,NULL,0);
-
     
     generatorSupply();
-
     generatorDemand();
 
     /*Setup handler*/
     bzero(&sa, sizeof(sa));
     sa.sa_handler = signalHandler;
-    sa.sa_flags= SA_RESTART|SA_NODEFER;
+    sa.sa_flags= SA_NODEFER;
     sigaction(SIGUSR2,&sa,NULL);
     sigaction(SIGUSR1,&sa,NULL);
     sigaction(SIGTERM,&sa,NULL);
@@ -211,39 +210,115 @@ Output: void
 Desc: when receiving a signal generates an amount of goods of type passed per message according to specifications
 */
 void generatorDailySupply(){
-
     struct msgSupply msg_Supply;
     int date_expry;
     key_t key_semSupply;
     int semSupply;
     struct sembuf sops;
     struct sembuf sops_dump;
+
     msgrcv(msg_generator_supply,&msg_Supply,sizeof(struct msgSupply)-sizeof(long),getpid(),0);
 
     if((semSupply=semget(getpid()*2,1,0666))==-1){
         TEST_ERROR;
     }
-    sops.sem_num=0;
-    sops.sem_op=-1;
-    sops.sem_flg=0;
-    semop(semSupply,&sops,1);
-    sops_dump.sem_num=0;
-    sops_dump.sem_op=-1;
-    sops_dump.sem_flg=0;
-    semop(dumpSem,&sops_dump,1);
-    if(shmPort[msg_Supply.type-1].demandGoods==0 && port_d[my_index].goods_offer+msg_Supply.quantity*info_goods[msg_Supply.type-1].size<=SO_FILL){
-        shmPort[msg_Supply.type-1].supplyGoods=1;
-        shmPort[msg_Supply.type-1].supply.type=msg_Supply.type;
-        shmPort[msg_Supply.type-1].supply.quantity=msg_Supply.quantity;
 
-        shmPort[msg_Supply.type-1].supply.date_expiry=info_goods[msg_Supply.type-1].life;
-        good_d[msg_Supply.type-1].goods_in_port += msg_Supply.quantity*info_goods[msg_Supply.type-1].size;
-        port_d[my_index].goods_offer += msg_Supply.quantity*info_goods[msg_Supply.type-1].size;
+    if(semctl(semSupply,0,GETPID) == getpid() && semop(semSupply,0,GETVAL) == 0){
+
+        if(semctl(dumpSem,0,GETPID) == getpid() && semop(dumpSem,0,GETVAL) == 0){
+        
+            if(shmPort[msg_Supply.type-1].demandGoods==0 && port_d[my_index].goods_offer+msg_Supply.quantity*info_goods[msg_Supply.type-1].size<=SO_FILL){
+                shmPort[msg_Supply.type-1].supplyGoods=1;
+                shmPort[msg_Supply.type-1].supply.type=msg_Supply.type;
+                shmPort[msg_Supply.type-1].supply.quantity=msg_Supply.quantity;
+
+                shmPort[msg_Supply.type-1].supply.date_expiry=info_goods[msg_Supply.type-1].life;
+                good_d[msg_Supply.type-1].goods_in_port += msg_Supply.quantity*info_goods[msg_Supply.type-1].size;
+                port_d[my_index].goods_offer += msg_Supply.quantity*info_goods[msg_Supply.type-1].size;
+            }
+
+        }else{
+            sops_dump.sem_num=0;
+            sops_dump.sem_op=-1;
+            sops_dump.sem_flg=0;
+
+            while(semop(dumpSem,&sops_dump,1)<0){
+                    if(errno!=EINTR){
+                    break;
+                }
+            }
+
+            if(shmPort[msg_Supply.type-1].demandGoods==0 && port_d[my_index].goods_offer+msg_Supply.quantity*info_goods[msg_Supply.type-1].size<=SO_FILL){
+                shmPort[msg_Supply.type-1].supplyGoods=1;
+                shmPort[msg_Supply.type-1].supply.type=msg_Supply.type;
+                shmPort[msg_Supply.type-1].supply.quantity=msg_Supply.quantity;
+
+                shmPort[msg_Supply.type-1].supply.date_expiry=info_goods[msg_Supply.type-1].life;
+                good_d[msg_Supply.type-1].goods_in_port += msg_Supply.quantity*info_goods[msg_Supply.type-1].size;
+                port_d[my_index].goods_offer += msg_Supply.quantity*info_goods[msg_Supply.type-1].size;
+            }
+
+            sops_dump.sem_op=1;
+            semop(dumpSem,&sops_dump,1);
+
+        }
+
+
+    }else{
+        sops.sem_num=0;
+        sops.sem_op=-1;
+        sops.sem_flg=0;
+        while(semop(semSupply,&sops,1)<0){
+            if(errno!=EINTR){
+                TEST_ERROR;
+                break;
+            }
+        }
+
+        if(semctl(dumpSem,0,GETPID) == getpid() && semop(dumpSem,0,GETVAL) == 0){
+        
+            if(shmPort[msg_Supply.type-1].demandGoods==0 && port_d[my_index].goods_offer+msg_Supply.quantity*info_goods[msg_Supply.type-1].size<=SO_FILL){
+                shmPort[msg_Supply.type-1].supplyGoods=1;
+                shmPort[msg_Supply.type-1].supply.type=msg_Supply.type;
+                shmPort[msg_Supply.type-1].supply.quantity=msg_Supply.quantity;
+
+                shmPort[msg_Supply.type-1].supply.date_expiry=info_goods[msg_Supply.type-1].life;
+                good_d[msg_Supply.type-1].goods_in_port += msg_Supply.quantity*info_goods[msg_Supply.type-1].size;
+                port_d[my_index].goods_offer += msg_Supply.quantity*info_goods[msg_Supply.type-1].size;
+            }
+
+        }else{
+            sops_dump.sem_num=0;
+            sops_dump.sem_op=-1;
+            sops_dump.sem_flg=0;
+
+            while(semop(dumpSem,&sops_dump,1)<0){
+                    if(errno!=EINTR){
+                    break;
+                }
+            }
+
+            if(shmPort[msg_Supply.type-1].demandGoods==0 && port_d[my_index].goods_offer+msg_Supply.quantity*info_goods[msg_Supply.type-1].size<=SO_FILL){
+                shmPort[msg_Supply.type-1].supplyGoods=1;
+                shmPort[msg_Supply.type-1].supply.type=msg_Supply.type;
+                shmPort[msg_Supply.type-1].supply.quantity=msg_Supply.quantity;
+
+                shmPort[msg_Supply.type-1].supply.date_expiry=info_goods[msg_Supply.type-1].life;
+                good_d[msg_Supply.type-1].goods_in_port += msg_Supply.quantity*info_goods[msg_Supply.type-1].size;
+                port_d[my_index].goods_offer += msg_Supply.quantity*info_goods[msg_Supply.type-1].size;
+            }
+            
+            sops_dump.sem_op=1;
+            semop(dumpSem,&sops_dump,1);
+        }
+
+        sops.sem_op=1;
+        semop(semSupply,&sops,1);
     }
-    sops_dump.sem_op=1;
-    semop(dumpSem,&sops_dump,1);
-    sops.sem_op=1;
-    semop(semSupply,&sops,1);
+
+
+
+
 }
 
 /*
@@ -279,7 +354,11 @@ void generatorSupply(){
     sops.sem_op=-1;
     sops.sem_flg=0;
 
-    semop(semSupply,&sops,1);
+    while(semop(semSupply,&sops,1)<0){
+        if(errno!=EINTR){
+            break;
+        }
+    }
 
     srand(getpid());
     newGood.type = (rand() % SO_MERCI)+1;
@@ -301,7 +380,12 @@ void generatorSupply(){
     sops_dump.sem_num=0;
     sops_dump.sem_op=-1;
     sops_dump.sem_flg=0;
-    semop(dumpSem,&sops_dump,1);
+   while(semop(dumpSem,&sops_dump,1)<0){
+            if(errno!=EINTR){
+                fprintf(stderr,"Error in semop, %d: %s\n",errno,strerror(errno));
+                break;
+            }
+    }
 
     good_d[newGood.type-1].goods_in_port += newGood.quantity*info_goods[newGood.type-1].size;
     port_d[my_index].goods_offer+=newGood.quantity*info_goods[newGood.type-1].size;
@@ -329,36 +413,72 @@ void reloadExpiryDate(){
     
 
     /*INSERT SUPPLY INTO SHM*/
-    sops.sem_num=0;
-    sops.sem_op=-1;
-    sops.sem_flg=0;
-    semop(semSupply,&sops,1);
+    if(semctl(semSupply,0,GETPID) == getpid() && semop(semSupply,0,GETVAL) == 0){
 
-    for(i=0;i<SO_MERCI;i++){
-        if(shmPort[i].supplyGoods == 1){
-            if(shmPort[i].supply.date_expiry >= 1)
-                shmPort[i].supply.date_expiry -= 1;
-            else{
-                shmPort[i].supplyGoods= 0;
-                shmPort[i].supply.date_expiry = -1;
+        for(i=0;i<SO_MERCI;i++){
+            if(shmPort[i].supplyGoods == 1){
+                if(shmPort[i].supply.date_expiry >= 1)
+                    shmPort[i].supply.date_expiry -= 1;
+                else{
+                    shmPort[i].supplyGoods= 0;
+                    shmPort[i].supply.date_expiry = -1;
 
-                /*Dump*/
-                sops_dump.sem_num=0;
-                sops_dump.sem_op=-1;
-                sops_dump.sem_flg=0;
-                semop(dumpSem,&sops_dump,1);
-                good_d[i].goods_in_port -= shmPort[i].supply.quantity*info_goods[i].size;
-                good_d[i].goods_expired_port += shmPort[i].supply.quantity*info_goods[i].size;
-                sops_dump.sem_op=1;
-                semop(dumpSem,&sops_dump,1);
+                    /*Dump*/
+                    sops_dump.sem_num=0;
+                    sops_dump.sem_op=-1;
+                    sops_dump.sem_flg=0;
+                    while(semop(dumpSem,&sops_dump,1)<0){
+                        if(errno!=EINTR){
+                            TEST_ERROR;
+                        }
+                    }      
+                    good_d[i].goods_in_port -= shmPort[i].supply.quantity*info_goods[i].size;
+                    good_d[i].goods_expired_port += shmPort[i].supply.quantity*info_goods[i].size;
+                    sops_dump.sem_op=1;
+                    semop(dumpSem,&sops_dump,1);
+                }
             }
         }
-    }
 
-    sops.sem_num=0;
-    sops.sem_op=1;
-    sops.sem_flg=0;
-    semop(semSupply,&sops,1);
+    }else{
+
+        sops.sem_num=0;
+        sops.sem_op=-1;
+        sops.sem_flg=0;
+        while(semop(semSupply,&sops,1)<0){
+                if(errno!=EINTR){
+                break;
+            }
+        }
+
+        for(i=0;i<SO_MERCI;i++){
+            if(shmPort[i].supplyGoods == 1){
+                if(shmPort[i].supply.date_expiry >= 1)
+                    shmPort[i].supply.date_expiry -= 1;
+                else{
+                    shmPort[i].supplyGoods= 0;
+                    shmPort[i].supply.date_expiry = -1;
+
+                    /*Dump*/
+                    sops_dump.sem_num=0;
+                    sops_dump.sem_op=-1;
+                    sops_dump.sem_flg=0;
+                    while(semop(dumpSem,&sops_dump,1)<0){
+                        if(errno!=EINTR){
+                            TEST_ERROR;
+                        }
+                    }      
+                    good_d[i].goods_in_port -= shmPort[i].supply.quantity*info_goods[i].size;
+                    good_d[i].goods_expired_port += shmPort[i].supply.quantity*info_goods[i].size;
+                    sops_dump.sem_op=1;
+                    semop(dumpSem,&sops_dump,1);
+                }
+            }
+        }
+
+        sops.sem_op=1;
+        semop(semSupply,&sops,1);
+    }
 
 }
 
@@ -382,7 +502,11 @@ void generatorDemand(){
     sops.sem_op=-1;
     sops.sem_flg=0;
     
-    semop(semSupply,&sops,1);
+    while(semop(semSupply,&sops,1)<0){
+        if(errno!=EINTR){
+            break;
+        }
+    }    
 
     srand(time(NULL));
     if(SO_MERCI == 1){
@@ -398,24 +522,29 @@ void generatorDemand(){
     }
 
     if(i != SO_MERCI+1){
-        shmPort[msg.type-1].demandGoods = 1;
         msg.quantity =  (SO_FILL/SO_PORTI)/info_goods[msg.type-1].size;
-        
-        if(sndDemand = msgsnd(mqDemand,&msg,sizeof(int),IPC_NOWAIT) == -1){
-            fprintf(stderr,"Error send messagge queue demand port, %d: %s\n",errno,strerror(errno));
-            exit(EXIT_FAILURE);
+        if(msg.quantity!=0){
+            shmPort[msg.type-1].demandGoods = 1;
+            if(sndDemand = msgsnd(mqDemand,&msg,sizeof(int),IPC_NOWAIT) == -1){
+                fprintf(stderr,"Error send messagge queue demand port, %d: %s\n",errno,strerror(errno));
+                exit(EXIT_FAILURE);
+            }
+
+            /*Dump*/
+            sops_dump.sem_num=0;
+            sops_dump.sem_op=-1;
+            sops_dump.sem_flg=0;
+            while(semop(dumpSem,&sops_dump,1)<0){
+                if(errno!=EINTR){
+                    break;
+                }
+            }    
+            port_d[my_index].goods_demand += msg.quantity*info_goods[msg.type-1].size; 
+            sops_dump.sem_op=1;
+            semop(dumpSem,&sops_dump,1);
         }
-
-        /*Dump*/
-        sops_dump.sem_num=0;
-        sops_dump.sem_op=-1;
-        sops_dump.sem_flg=0;
-        semop(dumpSem,&sops_dump,1);
-        port_d[my_index].goods_demand += msg.quantity*info_goods[msg.type-1].size; 
-        sops_dump.sem_op=1;
-        semop(dumpSem,&sops_dump,1);
     }
-
+    
     sops.sem_op=1;
     semop(semSupply,&sops,1);
 
@@ -439,10 +568,14 @@ int blockAllDock(){
         sops.sem_num=0;
         sops.sem_op=-semVal;
         sops.sem_flg=0;
-        semop(semDock,&sops,1);         
+        while(semop(semDock,&sops,1)<0){
+            if(errno!=EINTR){
+                fprintf(stderr,"Error in semop, %d: %s\n",errno,strerror(errno));
+                break;
+            }
+        }    
         return semVal;
     }
-
     return 0;
 }
 
@@ -483,10 +616,14 @@ void stop_ships(){
     ship_dump.sem_op=-1;
     ship_dump.sem_num=0;
     ship_dump.sem_flg=0;
-    semop(sem_ship,&ship_dump,1);
+    while(semop(sem_ship,&ship_dump,1)<0){
+        if(errno!=EINTR){
+            break;
+        }
+    }    
     for(i=0;i<SO_NAVI;i++){
         if(ships[i].port==port_pid){
-            kill(ships[i].ship,SIGPROF);
+            kill(ships[i].ship,SIGQUIT);
         }
     }
     ship_dump.sem_op=1;
@@ -499,10 +636,30 @@ Output: void
 Desc: managment swell
 */
 void swell(){
-    int semVal = blockAllDock();
+    struct sembuf sops_dump;
     struct timespec req;
     struct timespec rem;
-    double time_swell=SO_SWELL_DURATION/24.0;
+    int semVal;
+    double time_swell;
+    if(semctl(dumpSem,0,GETPID) == getpid() && semop(dumpSem,0,GETVAL) == 0){
+        port_d[my_index].swell = 1;
+    }else{
+        sops_dump.sem_op=-1;
+        sops_dump.sem_num=0;
+        sops_dump.sem_flg=0;
+        while(semop(dumpSem,&sops_dump,1)<0){
+            if(errno!=EINTR){
+                break;
+            }
+        }    
+        port_d[my_index].swell = 1;
+        sops_dump.sem_op=1;
+        semop(dumpSem,&sops_dump,1);
+    }  
+     
+    semVal = blockAllDock();
+
+    time_swell=SO_SWELL_DURATION/24.0;
     stop_ships();
     rem.tv_sec=0;
     rem.tv_nsec=0;
@@ -531,14 +688,11 @@ void deallocateResources(){
     int semSupply;
     int shm_dock;
     key_t supplyKey;
-
-    /*Shm ships/ports*/
-    shmdt(ships);
-
     /*Sem Docks*/
     if((semDock = semget(getpid(),1,0666)) == -1){
         TEST_ERROR;
     }
+
     if((semctl(semDock,0,IPC_RMID)) == -1){
         TEST_ERROR;
     }
@@ -572,7 +726,9 @@ void deallocateResources(){
     shmdt(info_goods);
     /*Dump*/
     shmdt(port_d);
-    shmdt(good_d);    
+    shmdt(good_d);
+    /*Shm ships/ports*/
+    shmdt(ships);    
 } 
                     
 /*
@@ -610,7 +766,6 @@ int variableUpdate(){
         if(strcmp(variable,"SO_SWELL_DURATION") == 0){
             SO_SWELL_DURATION = atoi(value);
         }
-
     }
 
 	fclose(f);
