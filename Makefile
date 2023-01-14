@@ -29,6 +29,7 @@ clean:
 	rm port
 	rm ship
 	rm master
+	rm weather
 
 run:
 	./master
