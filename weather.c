@@ -175,16 +175,7 @@ pid_t * ships_in_sea(int* length){
     int i;
     pid_t *ships_sea;
     int j = 0;
-    struct sembuf ship_dump;
     ships_sea=(pid_t*)malloc(sizeof(pid_t));  
-    ship_dump.sem_op=-1;
-    ship_dump.sem_num=0;
-    ship_dump.sem_flg=0;
-    while(semop(sem_ship,&ship_dump,1)<0){
-        if(errno!=EINTR){
-            break;
-        }
-    }
           
     for(i=0;i<SO_NAVI;i++){
         if(ships[i].port == 0){
@@ -195,13 +186,10 @@ pid_t * ships_in_sea(int* length){
         }
     }
 
-    ship_dump.sem_op=1;
-    semop(sem_ship,&ship_dump,1);
-
     *length = j;
-    if(j == 0)
+    if(j == 0){
         return NULL;
-    else
+    }else
         return ships_sea;  
     
 }
@@ -229,30 +217,83 @@ void storm(){
     int index;
     int length = 0;
     struct sembuf sops_dump;
-    pid_t *ships_sea = ships_in_sea(&length);
-    if(length != 0){
-        srand(time(NULL));
-        index=rand()%length;
-        kill(ships_sea[index],SIGUSR2);
-        /*Dump*/
-        if(semctl(dumpSem,0,GETPID) == getpid() && semctl(dumpSem,0,GETVAL) == 0){
-            weather_d->storm += 1;
-        }else{
-            sops_dump.sem_op=-1;
-            sops_dump.sem_num=0;
-            sops_dump.sem_flg=0;
-            while(semop(dumpSem,&sops_dump,1)<0){
-                if(errno!=EINTR){
-                    fprintf(stderr,"Error in semop, %d: %s\n",errno,strerror(errno));
-                    break;
+    struct sembuf ship_dump;
+    pid_t *ships_sea;
+
+    if(semctl(sem_ship,0,GETPID) == getpid() && semctl(sem_ship,0,GETVAL) == 0){
+
+        ships_sea = ships_in_sea(&length);
+
+        if(length != 0){
+            srand(time(NULL));
+            index=rand()%length;
+            kill(ships_sea[index],SIGUSR2);
+
+            /*Dump*/
+            if(semctl(dumpSem,0,GETPID) == getpid() && semctl(dumpSem,0,GETVAL) == 0){
+                weather_d->storm += 1;
+            }else{
+                sops_dump.sem_op=-1;
+                sops_dump.sem_num=0;
+                sops_dump.sem_flg=0;
+                while(semop(dumpSem,&sops_dump,1)<0){
+                    if(errno!=EINTR){
+                        fprintf(stderr,"Error in semop, %d: %s\n",errno,strerror(errno));
+                        break;
+                    }
                 }
+                weather_d->storm += 1;
+                sops_dump.sem_op=1;
+                semop(dumpSem,&sops_dump,1);   
             }
-            weather_d->storm += 1;
-            sops_dump.sem_op=1;
-            semop(dumpSem,&sops_dump,1);   
         }
+
+        free(ships_sea);
+
+    }else{
+
+        ship_dump.sem_num=0;
+        ship_dump.sem_flg=0;
+        ship_dump.sem_op=-1;
+
+        while(semop(sem_ship,&ship_dump,1)<0){
+            if(errno!=EINTR){
+                break;
+            }
+        }
+
+        ships_sea = ships_in_sea(&length);
+        if(length != 0){
+            srand(time(NULL));
+            index=rand()%length;
+            kill(ships_sea[index],SIGUSR2);
+
+            ship_dump.sem_op=1;
+            semop(sem_ship,&ship_dump,1);
+            /*Dump*/
+            if(semctl(dumpSem,0,GETPID) == getpid() && semctl(dumpSem,0,GETVAL) == 0){
+                weather_d->storm += 1;
+            }else{
+                sops_dump.sem_op=-1;
+                sops_dump.sem_num=0;
+                sops_dump.sem_flg=0;
+                while(semop(dumpSem,&sops_dump,1)<0){
+                    if(errno!=EINTR){
+                        fprintf(stderr,"Error in semop, %d: %s\n",errno,strerror(errno));
+                        break;
+                    }
+                }
+                weather_d->storm += 1;
+                sops_dump.sem_op=1;
+                semop(dumpSem,&sops_dump,1);   
+            }
+        }
+
+        free(ships_sea);
+
     }
-    free(ships_sea);
+
+
 }
 
 /*
@@ -264,11 +305,30 @@ void maelstrom(){
     int randShip;
     int length = 0;
     struct sembuf sops_dump;
-    pid_t *ships_sea = ships_in_sea(&length);
+    struct sembuf ship_dump;
+    pid_t *ships_sea;
+
+
+    ship_dump.sem_num=0;
+    ship_dump.sem_flg=0;
+    ship_dump.sem_op=-1;
+
+    while(semop(sem_ship,&ship_dump,1)<0){
+        if(errno!=EINTR){
+            break;
+        }
+    }
+
+    ships_sea = ships_in_sea(&length);
+    ship_dump.sem_num=0;
+    ship_dump.sem_flg=0;
     srand(time(NULL));
     if(ships_sea != NULL){
         randShip=rand()%length;  
         kill(ships_sea[randShip],SIGALRM);
+        
+        ship_dump.sem_op=1;
+        semop(sem_ship,&ship_dump,1);
         /*Dump*/
         sops_dump.sem_op=-1;
         sops_dump.sem_num=0;

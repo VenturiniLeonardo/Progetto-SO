@@ -382,6 +382,7 @@ void docking(pid_t pid_port){
         }
     }
 
+
     /*Ships info port*/
     ship_dump.sem_op=-1;
     ship_dump.sem_num=0;
@@ -397,7 +398,7 @@ void docking(pid_t pid_port){
 
     ship_dump.sem_op=1;
     semop(sem_ship,&ship_dump,1);
-
+    
     /*Dump*/
     sops_dump.sem_op=-1;
     sops_dump.sem_num=0;
