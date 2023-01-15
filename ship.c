@@ -66,7 +66,7 @@ void signalHandler(int signal){
             swell();
         break;
         case SIGALRM:
-            if(semctl(sem_ship,0,GETPID) == getpid() && semop(sem_ship,0,GETVAL) == 0)
+            if(semctl(sem_ship,0,GETPID) == getpid() && semctl(sem_ship,0,GETVAL) == 0)
                 ships[getPositionByShipPid(getpid())].port = -1;
             else{ 
                 ship_dump.sem_flg=0;
@@ -382,6 +382,7 @@ void docking(pid_t pid_port){
         }
     }
 
+
     /*Ships info port*/
     ship_dump.sem_op=-1;
     ship_dump.sem_num=0;
@@ -397,7 +398,7 @@ void docking(pid_t pid_port){
 
     ship_dump.sem_op=1;
     semop(sem_ship,&ship_dump,1);
-
+    
     /*Dump*/
     sops_dump.sem_op=-1;
     sops_dump.sem_num=0;
@@ -864,7 +865,7 @@ void restoreDemand(){
             exit(EXIT_FAILURE);
         }
 
-        if(semctl(dumpSem,0,GETPID) == getpid() && semop(dumpSem,0,GETVAL) == 0 ){
+        if(semctl(dumpSem,0,GETPID) == getpid() && semctl(dumpSem,0,GETVAL) == 0 ){
             /*Dump ships*/  
             ship_d->ship_sea_goods -= 1;
             /*Dump good*/  
@@ -893,7 +894,7 @@ void restoreDemand(){
 
     }else{/*Without goods*/
 
-        if(semctl(dumpSem,0,GETPID) == getpid() && semop(dumpSem,0,GETVAL) == 0 ){
+        if(semctl(dumpSem,0,GETPID) == getpid() && semctl(dumpSem,0,GETVAL) == 0 ){
             /*Dump ships*/  
             ship_d->ship_sea_no_goods -= 1;
             
@@ -938,7 +939,7 @@ void reloadExpiryDate(){
 
     sops_dump.sem_flg=0;
     sops_dump.sem_num=0;
-    if(semctl(sem_ship,0,GETPID) == getpid() && semop(sem_ship,0,GETVAL) == 0){
+    if(semctl(sem_ship,0,GETPID) == getpid() && semctl(sem_ship,0,GETVAL) == 0){
         if(goods_on.quantity != 0 &&  ships[getPositionByShipPid(getpid())].port == 0){   
             if(goods_on.date_expiry >= 1){
                 goods_on.date_expiry-=1;
@@ -946,7 +947,7 @@ void reloadExpiryDate(){
                 goods_on.date_expiry = -1;
                 goods_on.quantity = 0;
                 /*Dump goods*/ 
-                if(semctl(dumpSem,0,GETPID) == getpid() && semop(dumpSem,0,GETVAL) == 0){  
+                if(semctl(dumpSem,0,GETPID) == getpid() && semctl(dumpSem,0,GETVAL) == 0){  
                     good_d[goods_on.type-1].goods_expired_ship += goods_on.quantity*size;
                     ship_d->ship_sea_goods -= 1;
                     ship_d->ship_sea_no_goods += 1; 
@@ -986,7 +987,7 @@ void reloadExpiryDate(){
                 goods_on.date_expiry = -1;
                 goods_on.quantity = 0;
                 /*Dump goods*/ 
-                if(semctl(dumpSem,0,GETPID) == getpid() && semop(dumpSem,0,GETVAL) == 0){  
+                if(semctl(dumpSem,0,GETPID) == getpid() && semctl(dumpSem,0,GETVAL) == 0){  
                     good_d[goods_on.type-1].goods_expired_ship += goods_on.quantity*size;
                     ship_d->ship_sea_goods -= 1;
                     ship_d->ship_sea_no_goods += 1; 
