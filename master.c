@@ -229,7 +229,6 @@ int main(){
     stopWeather();
     stopAllShips();
     killAllPorts();
-
     /*Wait termination of all process*/
     while ((child_pid = wait(NULL)) != -1)
         continue;
@@ -422,12 +421,10 @@ int printDump(int dSem, struct goods_states* good_d,struct port_states* port_d,s
     int i;
     int allOffer = 1;
     int allDemand = 1;
-
     sops_dump.sem_num=0;
     sops_dump.sem_op=-1;
     sops_dump.sem_flg=0;
     semop(dSem,&sops_dump,1);
-
     printf("MERCI \n");
     for(i = 0;i<SO_MERCI;i++){
         printf("Tipo %d:\n",i+1);
@@ -458,9 +455,10 @@ int printDump(int dSem, struct goods_states* good_d,struct port_states* port_d,s
     printf("- Navi colpite dalla tempesta %d\n",weather_d->storm);
     printf("- Navi affondate dal Maelstrom %d\n",weather_d->maelstrom);
     printf("- Porti colpiti dalla mareggiata: \n");
-    for(i = 0;i<SO_PORTI;i++)
+    for(i = 0;i<SO_PORTI;i++){
         if(port_d[i].swell == 1)
             printf("  %d \n",ports[i].pidPort);
+    }
     sops_dump.sem_op=1;
     semop(dSem,&sops_dump,1);
 
@@ -567,7 +565,7 @@ Input: void
 Output: void
 Desc: send a signal to weather to indicate termination
 */
-void stopWeather(struct weather_states * weather_d){
+void stopWeather(){
     kill(weatherPid,SIGTERM);
 }
 
@@ -706,18 +704,27 @@ Desc: send a signal to ships and ports to update the expiration date of the good
 */
 void updateDateExpiry(){
     int i;
-    
+    int dSem_ship;
+    struct sembuf sops;
+    if((dSem_ship = semget(SHIP_KEY,1,0666)) == -1){
+        fprintf(stderr,"Error semaphore creation, %d: %s\n",errno,strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    sops.sem_flg=0;
+    sops.sem_num=0;
+    sops.sem_op=-1;
     for(i = 0; i< SO_PORTI;i++){
         kill(ports[i].pidPort,SIGUSR1);
     }
     
+    semop(dSem_ship,&sops,1);
     for(i = 0;i<SO_NAVI;i++){
-        if(ships[i].ship != 0){}
+        if(ships[i].ship != -1){
             kill(ships[i].ship,SIGUSR1);
-
+        }
     }
-
-}
+    sops.sem_op=1;
+    semop(dSem_ship,&sops,1);
 
 /*
 Input: struct goods_states* ,struct port_states* ,struct ship_dump* ,struct weather_states * 

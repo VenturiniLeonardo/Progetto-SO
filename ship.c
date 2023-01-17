@@ -66,12 +66,14 @@ void signalHandler(int signal){
             swell();
         break;
         case SIGALRM:
-            if(semctl(sem_ship,0,GETPID) == getpid() && semctl(sem_ship,0,GETVAL) == 0)
+            ship_dump.sem_num=0;
+            ship_dump.sem_flg=0;
+            if(semctl(sem_ship,0,GETPID) == getpid() && semctl(sem_ship,0,GETVAL) == 0){
                 ships[getPositionByShipPid(getpid())].port = -1;
-            else{ 
-                ship_dump.sem_flg=0;
+                ship_dump.sem_op = 1;
+                semop(sem_ship,&ship_dump,1);
+            }else{ 
                 ship_dump.sem_op=-1;
-                ship_dump.sem_num=0;
                 semop(sem_ship,&ship_dump,1);
                 ships[getPositionByShipPid(getpid())].port = -1;
                 ship_dump.sem_op = 1;
@@ -694,7 +696,7 @@ int getSupply(pid_t pid_port){
                 min_exipry = SO_MAX_VITA+1;
             }
 
-            
+ 
         }while(getMaxExpiryDate(shmPort)  == min_exipry_prev && flagGood == 0);
         
         sops.sem_num=0;
@@ -713,7 +715,7 @@ int getSupply(pid_t pid_port){
             goods_on.quantity = 0;
             goods_on.date_expiry = -1;
             demandPort = 0;
-            free(portNear);
+            free(portNear); 
             return -1;
         }
         
@@ -871,9 +873,9 @@ void restoreDemand(){
             /*Dump good*/  
             good_d[goods_on.type-1].goods_on_ship -= goods_on.quantity*size;
             good_d[goods_on.type-1].goods_expired_ship += goods_on.quantity*size;
-            
+            sops_dump.sem_op=1;
+            semop(dumpSem,&sops_dump,1);
         }else{
-            
             sops_dump.sem_op=-1;
             while(semop(dumpSem,&sops_dump,1)<0){
                 if(errno!=EINTR){
@@ -897,7 +899,8 @@ void restoreDemand(){
         if(semctl(dumpSem,0,GETPID) == getpid() && semctl(dumpSem,0,GETVAL) == 0 ){
             /*Dump ships*/  
             ship_d->ship_sea_no_goods -= 1;
-            
+            sops_dump.sem_op=1;
+            semop(dumpSem,&sops_dump,1);
         }else{
             sops_dump.sem_op=-1;
             while(semop(dumpSem,&sops_dump,1)<0){

@@ -162,7 +162,7 @@ int main(int argc,char*argv[]){
     }
 
     /*Shm for goods info*/
-    if((shmGoods = shmget(GOODS_INFO_KEY,sizeof(0),0666)) == -1)
+    if((shmGoods = shmget(GOODS_INFO_KEY,0,0666)) == -1)
         TEST_ERROR;
     
     info_goods = (struct good_info*) shmat(shmGoods,NULL,0);
